@@ -267,6 +267,8 @@
         adminNotificationsPrefetchDone: false,
         notificationEditorExpanded: false,
         notificationFilter: 'activas',
+        planeacionesFacilitadorAssignmentFilter: '',
+        planeacionesGrupoAssignmentFilter: '',
         planeacionesMateriaFilter: '',
         planeacionesTallerFilter: '',
         multiGroupActiveChildByLote: {},
@@ -1071,6 +1073,8 @@
         state.ui.fastPlaneacionesBootPromise = null;
         state.ui.notificationEditorExpanded = false;
         state.ui.notificationFilter = 'activas';
+        state.ui.planeacionesFacilitadorAssignmentFilter = '';
+        state.ui.planeacionesGrupoAssignmentFilter = '';
         state.ui.planeacionesMateriaFilter = '';
         state.ui.planeacionesTallerFilter = '';
         state.ui.multiGroupActiveChildByLote = {};
@@ -2351,8 +2355,8 @@
       };
       const semanaFilter = $('filterSemana').value;
       const estadoFilter = $('filterEstado').value;
-      const grupoFilter = $('filterGrupo').value;
-      const facilitadorFilter = $('filterFacilitador').value;
+      const grupoFilter = String((state.ui && state.ui.planeacionesGrupoAssignmentFilter) || (($('filterGrupo') && $('filterGrupo').value) || '')).trim();
+      const facilitadorFilter = String((state.ui && state.ui.planeacionesFacilitadorAssignmentFilter) || (($('filterFacilitador') && $('filterFacilitador').value) || '')).trim();
       const alumnoFilter = $('filterAlumnoId').value;
       const materiaFilter = String((state.ui && state.ui.planeacionesMateriaFilter) || '').trim();
       const tallerFilter = String((state.ui && state.ui.planeacionesTallerFilter) || '').trim();
@@ -2370,8 +2374,8 @@
       return {
         semana_id: String(($('filterSemana') && $('filterSemana').value) || '').trim(),
         estado: String(($('filterEstado') && $('filterEstado').value) || '').trim(),
-        grupo_id: String(($('filterGrupo') && $('filterGrupo').value) || '').trim(),
-        facilitador_id: String(($('filterFacilitador') && $('filterFacilitador').value) || '').trim(),
+        grupo_id: String((state.ui && state.ui.planeacionesGrupoAssignmentFilter) || (($('filterGrupo') && $('filterGrupo').value) || '')).trim(),
+        facilitador_id: String((state.ui && state.ui.planeacionesFacilitadorAssignmentFilter) || (($('filterFacilitador') && $('filterFacilitador').value) || '')).trim(),
         alumno_id: String(($('filterAlumnoId') && $('filterAlumnoId').value) || '').trim(),
         materia_id: String((state.ui && state.ui.planeacionesMateriaFilter) || '').trim(),
         taller_id: String((state.ui && state.ui.planeacionesTallerFilter) || '').trim()
@@ -3699,6 +3703,8 @@
     }
 
     function clearPlaneacionesMateriaFilter() {
+      if (state.ui) state.ui.planeacionesFacilitadorAssignmentFilter = '';
+      if (state.ui) state.ui.planeacionesGrupoAssignmentFilter = '';
       if (state.ui) state.ui.planeacionesMateriaFilter = '';
       if (state.ui) state.ui.planeacionesTallerFilter = '';
     }
@@ -6890,9 +6896,16 @@
     }
 
     async function openFacilitadorPlaneaciones(facilitadorId, grupoId, materiaId, tallerId) {
+      const targetFacilitadorId = String(facilitadorId || '').trim();
+      const targetGrupoId = grupoId !== undefined ? String(grupoId || '').trim() : '';
+      if (state.ui) state.ui.planeacionesFacilitadorAssignmentFilter = targetFacilitadorId;
+      if (state.ui) state.ui.planeacionesGrupoAssignmentFilter = targetGrupoId;
+      const applyAssignmentFilters = () => {
+        if ($('filterFacilitador')) $('filterFacilitador').value = targetFacilitadorId;
+        if ($('filterGrupo') && grupoId !== undefined) $('filterGrupo').value = targetGrupoId;
+      };
       activateAdminModule('planeaciones');
-      if ($('filterFacilitador')) $('filterFacilitador').value = String(facilitadorId || '').trim();
-      if ($('filterGrupo') && grupoId !== undefined) $('filterGrupo').value = String(grupoId || '').trim();
+      applyAssignmentFilters();
       if (state.ui) state.ui.planeacionesMateriaFilter = materiaId !== undefined ? String(materiaId || '').trim() : '';
       if (state.ui) state.ui.planeacionesTallerFilter  = tallerId  !== undefined ? String(tallerId  || '').trim() : '';
       renderPlaneacionesSurface({
@@ -6900,12 +6913,14 @@
         includePlaneaciones: true,
         includeAlertas: false
       });
+      applyAssignmentFilters();
       await refreshPlaneaciones();
       renderPlaneacionesSurface({
         includeStats: false,
         includePlaneaciones: true,
         includeAlertas: false
       });
+      applyAssignmentFilters();
       setBanner(
         state.ui && state.ui.planeacionesTallerFilter
           ? 'Planeaciones filtradas por taller del facilitador.'
@@ -14976,6 +14991,8 @@
         ($('filterGrupo') && $('filterGrupo').value) ||
         ($('filterFacilitador') && $('filterFacilitador').value) ||
         ($('filterAlumnoId') && $('filterAlumnoId').value) ||
+        (state.ui && state.ui.planeacionesGrupoAssignmentFilter) ||
+        (state.ui && state.ui.planeacionesFacilitadorAssignmentFilter) ||
         (state.ui && state.ui.planeacionesMateriaFilter) ||
         (state.ui && state.ui.planeacionesTallerFilter)
       );
