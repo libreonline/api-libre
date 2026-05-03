@@ -249,6 +249,7 @@
         talleres: [],
         talleres_admin: [],
         alumno_talleres: [],
+        suplencias: [],
         refuerzos: [],
         periodos: [],
         semanas: []
@@ -584,6 +585,7 @@
         talleres: [],
         talleres_admin: [],
         alumno_talleres: [],
+        suplencias: [],
         refuerzos: [],
         periodos: [],
         semanas: []
@@ -766,7 +768,7 @@
     function getPlaneacionesSurfaceCatalogBlocks() {
       return canUseAdminShell()
         ? ['facilitadores', 'grupos', 'materias', 'semanas']
-        : ['grupos', 'materias', 'semanas'];
+        : ['grupos', 'materias', 'semanas', 'talleres', 'suplencias'];
     }
 
     function getPlaneacionesEditorCatalogBlocks() {
@@ -3091,7 +3093,12 @@
         renderPlanBuilderVisibility();
         scheduleVisiblePlaneacionDetailPrefetch();
         if (!canUseAdminShell() && state.session && state.session.usuario) {
-          renderFacilitadorSuplenciasActivasSection(state.session.usuario.facilitador_id || state.session.usuario.id || '');
+          const suplenciasHost = $('suplenciasActivasSection');
+          if (suplenciasHost) {
+            const suplenciasHtml = renderFacilitadorSuplenciasActivasSection(state.session.usuario.facilitador_id || state.session.usuario.id || '');
+            suplenciasHost.innerHTML = suplenciasHtml || '';
+            suplenciasHost.hidden = !suplenciasHtml;
+          }
         }
       }
       if (includeAlertas && isAlertasSurfaceVisible()) renderAlertas();
