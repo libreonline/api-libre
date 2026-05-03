@@ -754,7 +754,7 @@
     function getPlaneacionesEditorCatalogBlocks() {
       return canUseAdminShell()
         ? ['alumnos', 'facilitadores', 'grupos', 'materias', 'submaterias', 'semanas', 'talleres', 'alumno_talleres']
-        : ['alumnos', 'submaterias', 'talleres', 'alumno_talleres'];
+        : ['alumnos', 'facilitador_asignaciones', 'submaterias', 'talleres', 'alumno_talleres'];
     }
 
     function getCatalogBlocksForModuleWithScope(moduleName, options = {}) {
@@ -8981,6 +8981,39 @@
       return String((state.session && state.session.usuario && state.session.usuario.facilitador_id) || '').trim();
     }
 
+    function getPlanEditorSelectedMateriaId() {
+      return String(($('planMateria') && $('planMateria').value) || '').trim();
+    }
+
+    function getPlanEditorNormalAssignmentGroupIdSet(materiaId) {
+      const targetMateriaId = String(materiaId || getPlanEditorSelectedMateriaId()).trim();
+      if (canUseAdminShell() || state.planEditor.mode === 'edit' || !targetMateriaId || isPlanTallerMateria(targetMateriaId)) return null;
+      const currentUserId = getCurrentUserId();
+      if (!currentUserId) return null;
+      const groupIds = new Set();
+      getFacilitadorAsignaciones(currentUserId).forEach((row) => {
+        if (!row.activa || row.taller_id) return;
+        if (String(row.materia_id || '').trim() !== targetMateriaId) return;
+        const groupId = String(row.grupo_id || '').trim();
+        if (groupId) groupIds.add(groupId);
+      });
+      return groupIds;
+    }
+
+    function getPlanEditorGroupOptions() {
+      const groups = [...state.catalogos.grupos].sort((a, b) => getGrupoDisplayName(a).localeCompare(getGrupoDisplayName(b), 'es'));
+      const allowedGroupIds = getPlanEditorNormalAssignmentGroupIdSet();
+      if (!allowedGroupIds) return groups;
+      return groups.filter((group) => allowedGroupIds.has(String(group.grupo_id || '').trim()));
+    }
+
+    function getPlanEditorGroupEmptyMessage() {
+      if (!canUseAdminShell() && state.planEditor.mode !== 'edit' && getPlanEditorSelectedMateriaId()) {
+        return 'No tienes grupos asignados para esta materia.';
+      }
+      return 'No hay grupos disponibles.';
+    }
+
     function getSelectedGroupIds() {
       const host = $('planGruposChecklist');
       if (!host) return [];
@@ -10882,7 +10915,11 @@
           ? (currentSelectedGroups.length ? currentSelectedGroups : [state.planEditor.lockedGrupoId])
           : currentSelectedGroups
       );
-      const groups = [...state.catalogos.grupos].sort((a, b) => getGrupoDisplayName(a).localeCompare(getGrupoDisplayName(b), 'es'));
+      const groups = getPlanEditorGroupOptions();
+      if (!groups.length) {
+        host.innerHTML = '<div class="empty">' + escapeHtml(getPlanEditorGroupEmptyMessage()) + '</div>';
+        return;
+      }
       host.innerHTML = groups.map((group) => {
         const disabled = editLocked && group.grupo_id !== state.planEditor.lockedGrupoId;
         const checked = editLocked ? group.grupo_id === state.planEditor.lockedGrupoId : checkedSet.has(group.grupo_id);
@@ -16268,6 +16305,7 @@
         state.planEditor.selectedSubmateriaId = '';
         state.planEditor.selectedTallerId = '';
         syncPlanSubmateriaSelect('');
+        renderPlanGroupChecklist();
         renderPlanAlumnosChecklist(new Set(getSelectedPlanAlumnos()));
       });
       if ($('planSubmateria')) $('planSubmateria').addEventListener('change', (event) => {
