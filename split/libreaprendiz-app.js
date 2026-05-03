@@ -268,6 +268,7 @@
         notificationEditorExpanded: false,
         notificationFilter: 'activas',
         planeacionesMateriaFilter: '',
+        planeacionesTallerFilter: '',
         multiGroupActiveChildByLote: {},
         debounceTimers: {},
         adminUiEventsBound: false,
@@ -1071,6 +1072,7 @@
         state.ui.notificationEditorExpanded = false;
         state.ui.notificationFilter = 'activas';
         state.ui.planeacionesMateriaFilter = '';
+        state.ui.planeacionesTallerFilter = '';
         state.ui.multiGroupActiveChildByLote = {};
         state.ui.restoreSnapshotSyncing = false;
         if (state.ui.restoreSnapshotSyncFinishedTimeout) {
@@ -3689,6 +3691,7 @@
 
     function clearPlaneacionesMateriaFilter() {
       if (state.ui) state.ui.planeacionesMateriaFilter = '';
+      if (state.ui) state.ui.planeacionesTallerFilter = '';
     }
 
     function activateAdminModule(moduleName) {
@@ -6877,11 +6880,12 @@
       });
     }
 
-    async function openFacilitadorPlaneaciones(facilitadorId, grupoId, materiaId) {
+    async function openFacilitadorPlaneaciones(facilitadorId, grupoId, materiaId, tallerId) {
       activateAdminModule('planeaciones');
       if ($('filterFacilitador')) $('filterFacilitador').value = String(facilitadorId || '').trim();
       if ($('filterGrupo') && grupoId !== undefined) $('filterGrupo').value = String(grupoId || '').trim();
       if (state.ui) state.ui.planeacionesMateriaFilter = materiaId !== undefined ? String(materiaId || '').trim() : '';
+      if (state.ui) state.ui.planeacionesTallerFilter  = tallerId  !== undefined ? String(tallerId  || '').trim() : '';
       renderPlaneacionesSurface({
         includeStats: false,
         includePlaneaciones: true,
@@ -6894,9 +6898,11 @@
         includeAlertas: false
       });
       setBanner(
-        state.ui && state.ui.planeacionesMateriaFilter
-          ? 'Planeaciones filtradas por asignaci\u00f3n del facilitador.'
-          : 'Planeaciones filtradas por facilitador.',
+        state.ui && state.ui.planeacionesTallerFilter
+          ? 'Planeaciones filtradas por taller del facilitador.'
+          : state.ui && state.ui.planeacionesMateriaFilter
+            ? 'Planeaciones filtradas por asignaci\u00f3n del facilitador.'
+            : 'Planeaciones filtradas por facilitador.',
         'info'
       );
     }
@@ -11377,11 +11383,15 @@
       const role = state.session && state.session.usuario ? state.session.usuario.rol : '';
       let rows = [...state.planeaciones];
       const materiaFilter = String((state.ui && state.ui.planeacionesMateriaFilter) || '').trim();
+      const tallerFilter  = String((state.ui && state.ui.planeacionesTallerFilter)  || '').trim();
       if (role === 'facilitador') {
         rows = rows.filter((plan) => !['cerrada', 'archivada', 'cierre_pendiente'].includes(plan.estado));
       }
       if (materiaFilter) {
         rows = rows.filter((plan) => String(plan.materia_id || '').trim() === materiaFilter);
+      }
+      if (tallerFilter) {
+        rows = rows.filter((plan) => String(plan.taller_id || '').trim() === tallerFilter);
       }
       if (role !== 'facilitador') {
         rows = sortAdminPlaneacionesByStatus(rows);
