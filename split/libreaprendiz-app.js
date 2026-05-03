@@ -6728,7 +6728,7 @@
       }
       state.facilitadoresUi.suplenciaOpen = true;
       state.facilitadoresUi.suplencia = sup;
-      renderAdminFacilitadoresDetailPanel();
+      renderFacilitadorDetailPanel();
       // fill selects after render
       const grupoSel = $('adminFacilitadorSuplenciaGrupo');
       if (grupoSel) {
@@ -6760,7 +6760,7 @@
     function closeFacilitadorSuplenciaPanel() {
       state.facilitadoresUi.suplenciaOpen = false;
       state.facilitadoresUi.suplencia = null;
-      renderAdminFacilitadoresDetailPanel();
+      renderFacilitadorDetailPanel();
     }
 
     async function saveFacilitadorSuplencia(button) {
@@ -6787,7 +6787,7 @@
         }
         state.facilitadoresUi.suplenciaOpen = false;
         state.facilitadoresUi.suplencia = null;
-        renderAdminFacilitadoresDetailPanel();
+        renderFacilitadorDetailPanel();
         setBanner('Suplencia guardada.', 'success');
       }, { button, busyText: 'Guardando...' });
     }
