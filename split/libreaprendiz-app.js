@@ -10,6 +10,9 @@
     const OPEN_PLAN_DETAIL_PREFETCH_LIMIT = 10;
     const OPEN_PLAN_DETAIL_PREFETCH_CONCURRENCY = 2;
     const OPEN_PLAN_DETAIL_PREFETCH_DELAY_MS = 650;
+    const ADMIN_PLAN_DETAIL_WARMUP_LIMIT = 4;
+    const ADMIN_PLAN_DETAIL_WARMUP_CONCURRENCY = 2;
+    const ADMIN_PLAN_DETAIL_WARMUP_DELAY_MS = 120;
     // V2: cap conservador para snapshot. No persistir más de N detalles
     // prefetched (excluyendo openPlan que va aparte) para no inflar
     // localStorage. 5 cubre la mayoría de los casos del facilitador.
@@ -3026,11 +3029,28 @@
       return !(plan.detail_loaded && hasUsableOpenPlanDetail(plan));
     }
 
-    function getVisiblePlaneacionDetailPrefetchIds() {
+    function getPlaneacionDetailPrefetchLimit(options = {}) {
+      const requestedLimit = Number(options.limit || 0);
+      if (requestedLimit > 0) return requestedLimit;
+      return canUseAdminShell() ? ADMIN_PLAN_DETAIL_WARMUP_LIMIT : OPEN_PLAN_DETAIL_PREFETCH_LIMIT;
+    }
+
+    function getPlaneacionDetailPrefetchConcurrency(options = {}) {
+      const requestedConcurrency = Number(options.concurrency || 0);
+      if (requestedConcurrency > 0) return requestedConcurrency;
+      return canUseAdminShell() ? ADMIN_PLAN_DETAIL_WARMUP_CONCURRENCY : OPEN_PLAN_DETAIL_PREFETCH_CONCURRENCY;
+    }
+
+    function getPlaneacionDetailPrefetchDelayMs() {
+      return canUseAdminShell() ? ADMIN_PLAN_DETAIL_WARMUP_DELAY_MS : OPEN_PLAN_DETAIL_PREFETCH_DELAY_MS;
+    }
+
+    function getVisiblePlaneacionDetailPrefetchIds(options = {}) {
       if (!state.session || !state.session.token) return [];
       if (!state.ui || state.ui.planeacionesLoading || !state.ui.planeacionesLoaded) return [];
       if (!isPlaneacionesSurfaceVisible()) return [];
       const seen = new Set();
+      const limit = getPlaneacionDetailPrefetchLimit(options);
       return getVisiblePlaneaciones()
         .map((plan, index) => ({ plan, index }))
         .filter(({ plan }) => {
@@ -3039,14 +3059,14 @@
           seen.add(planId);
           return canPrefetchPlaneacionDetail(plan);
         })
-        .slice(0, OPEN_PLAN_DETAIL_PREFETCH_LIMIT)
+        .slice(0, limit)
         .map(({ plan }) => String(plan.planeacion_id || '').trim())
         .filter(Boolean);
     }
 
-    async function prefetchVisiblePlaneacionDetails() {
+    async function prefetchVisiblePlaneacionDetails(options = {}) {
       if (!state.ui || state.ui.planeacionDetailPrefetchRunning) return;
-      const planIds = getVisiblePlaneacionDetailPrefetchIds();
+      const planIds = getVisiblePlaneacionDetailPrefetchIds(options);
       if (!planIds.length) return;
       state.ui.planeacionDetailPrefetchRunning = true;
       try {
@@ -3063,7 +3083,7 @@
             } catch (_) {}
           }
         };
-        const workerCount = Math.min(OPEN_PLAN_DETAIL_PREFETCH_CONCURRENCY, planIds.length);
+        const workerCount = Math.min(getPlaneacionDetailPrefetchConcurrency(options), planIds.length);
         await Promise.all(Array.from({ length: workerCount }, loadNext));
       } finally {
         if (state.ui) state.ui.planeacionDetailPrefetchRunning = false;
@@ -3088,7 +3108,7 @@
         ' ontouchstart="' + action + '"';
     }
 
-    function scheduleVisiblePlaneacionDetailPrefetch(delay = OPEN_PLAN_DETAIL_PREFETCH_DELAY_MS) {
+    function scheduleVisiblePlaneacionDetailPrefetch(delay = getPlaneacionDetailPrefetchDelayMs()) {
       if (!state.session || !state.session.token) return;
       if (!state.ui || !state.ui.planeacionesLoaded) return;
       if (!isPlaneacionesSurfaceVisible()) return;
