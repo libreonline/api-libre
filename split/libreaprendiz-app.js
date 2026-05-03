@@ -6915,9 +6915,35 @@
           semana_id: semanaId,
           request_id: requestId
         });
-        await refreshPlaneaciones();
-        if (data && data.planeacion_id) {
-          openPlanLocalInstant(data.planeacion_id);
+        const createdPlanId = String(data && data.planeacion_id || '').trim();
+        let refreshError = null;
+        try {
+          await refreshPlaneaciones();
+        } catch (err) {
+          refreshError = err;
+        }
+        if (createdPlanId) {
+          if (!getPlanById(createdPlanId)) {
+            upsertPlaneacionRow({
+              planeacion_id: createdPlanId,
+              semana_id: semanaId,
+              suplencia_id: suplenciaId,
+              creada_por_suplencia: 'si',
+              facilitador_suplente_id: state.session && state.session.usuario
+                ? (state.session.usuario.facilitador_id || state.session.usuario.id || '')
+                : '',
+              estado: 'borrador',
+              alumnos_count: 0,
+              actividades_count: 0,
+              detail_loaded: false
+            });
+          }
+          openPlanLocalInstant(createdPlanId);
+          await ensurePlaneacionDetailLoaded(createdPlanId, { force: true });
+          renderPlaneacionesList();
+          renderFacilitadorSuplenciasActivasHost();
+        } else if (refreshError) {
+          throw refreshError;
         }
         setBanner('Plan creado como suplente.', 'success');
       }, { button, busyText: 'Creando...' });
