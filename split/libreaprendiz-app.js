@@ -6369,9 +6369,9 @@
           verBtn = '<button class="btn-secondary" type="button" onclick="openFacilitadorPlaneaciones(\'' + escapeJsAttrValue(state.facilitadoresUi.selectedFacilitadorId) + '\', \'' + escapeJsAttrValue(row.grupo_id) + '\', \'' + escapeJsAttrValue(row.materia_id) + '\')">Ver</button>';
         }
         const periodo = [
-          row.fecha_inicio ? ('Desde ' + formatFechaHumana(row.fecha_inicio)) : '',
-          row.fecha_fin ? ('Hasta ' + formatFechaHumana(row.fecha_fin)) : ''
-        ].filter(Boolean).join(' \u00b7 ') || 'Sin vigencia cerrada';
+          row.fecha_inicio ? formatFechaCorta(row.fecha_inicio) : '',
+          row.fecha_fin ? formatFechaCorta(row.fecha_fin) : ''
+        ].filter(Boolean).join(' - ') || 'Sin vigencia';
         return [
           '<article class="admin-facilitadores-assignment-item">',
             '<div class="admin-facilitadores-assignment-copy">',
