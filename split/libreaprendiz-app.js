@@ -2512,6 +2512,7 @@
           state.ui.planeacionesLoadingMore = false;
         }
         if (isPlaneacionesSurfaceVisible()) renderPlaneacionesList();
+        renderFacilitadorSuplenciasActivasHost();
         return;
       }
 
@@ -2552,6 +2553,7 @@
             await ensurePlaneacionDetailLoaded(state.openPlanId, { silent: true });
           }
         }
+        renderFacilitadorSuplenciasActivasHost();
       } finally {
         if (state.ui) {
           state.ui.planeacionesLoading = false;
@@ -2886,6 +2888,7 @@
         if (shouldRequestSurfaceCatalogs) {
           try {
             await refreshCatalogos({ blocks: missingSurfaceCatalogBlocks });
+            renderFacilitadorSuplenciasActivasHost();
           } catch (_) {}
         }
         renderBaseSelects({ planeaciones: true });
@@ -3081,6 +3084,15 @@
       return !canUseAdminShell() || state.activeAdminModule === 'dashboard' || state.activeAdminModule === 'planeaciones';
     }
 
+    function renderFacilitadorSuplenciasActivasHost() {
+      if (canUseAdminShell() || !state.session || !state.session.usuario) return;
+      const suplenciasHost = $('suplenciasActivasSection');
+      if (!suplenciasHost) return;
+      const suplenciasHtml = renderFacilitadorSuplenciasActivasSection(state.session.usuario.facilitador_id || state.session.usuario.id || '');
+      suplenciasHost.innerHTML = suplenciasHtml || '';
+      suplenciasHost.hidden = !suplenciasHtml;
+    }
+
     function renderPlaneacionesSurface(options = {}) {
       const includeStats = options.includeStats !== false;
       const includePlaneaciones = options.includePlaneaciones !== false;
@@ -3092,14 +3104,7 @@
         renderPlaneacionesList();
         renderPlanBuilderVisibility();
         scheduleVisiblePlaneacionDetailPrefetch();
-        if (!canUseAdminShell() && state.session && state.session.usuario) {
-          const suplenciasHost = $('suplenciasActivasSection');
-          if (suplenciasHost) {
-            const suplenciasHtml = renderFacilitadorSuplenciasActivasSection(state.session.usuario.facilitador_id || state.session.usuario.id || '');
-            suplenciasHost.innerHTML = suplenciasHtml || '';
-            suplenciasHost.hidden = !suplenciasHtml;
-          }
-        }
+        renderFacilitadorSuplenciasActivasHost();
       }
       if (includeAlertas && isAlertasSurfaceVisible()) renderAlertas();
     }
