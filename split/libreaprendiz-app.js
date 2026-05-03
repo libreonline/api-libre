@@ -2354,11 +2354,13 @@
       const grupoFilter = $('filterGrupo').value;
       const facilitadorFilter = $('filterFacilitador').value;
       const alumnoFilter = $('filterAlumnoId').value;
+      const tallerFilter = String((state.ui && state.ui.planeacionesTallerFilter) || '').trim();
       if (semanaFilter) payload.semana_id = semanaFilter;
       if (estadoFilter) payload.estado = estadoFilter;
       if (grupoFilter) payload.grupo_id = grupoFilter;
       if (facilitadorFilter) payload.facilitador_id = facilitadorFilter;
       if (alumnoFilter) payload.alumno_id = alumnoFilter;
+      if (tallerFilter) payload.taller_id = tallerFilter;
       return payload;
     }
 
@@ -2368,7 +2370,8 @@
         estado: String(($('filterEstado') && $('filterEstado').value) || '').trim(),
         grupo_id: String(($('filterGrupo') && $('filterGrupo').value) || '').trim(),
         facilitador_id: String(($('filterFacilitador') && $('filterFacilitador').value) || '').trim(),
-        alumno_id: String(($('filterAlumnoId') && $('filterAlumnoId').value) || '').trim()
+        alumno_id: String(($('filterAlumnoId') && $('filterAlumnoId').value) || '').trim(),
+        taller_id: String((state.ui && state.ui.planeacionesTallerFilter) || '').trim()
       };
     }
 
@@ -2379,6 +2382,7 @@
         if (filters.estado && String(plan.estado || '').trim() !== filters.estado) return false;
         if (filters.grupo_id && String(plan.grupo_id || '').trim() !== filters.grupo_id) return false;
         if (filters.facilitador_id && String(plan.facilitador_id || '').trim() !== filters.facilitador_id) return false;
+        if (filters.taller_id && String(plan.taller_id || '').trim() !== filters.taller_id) return false;
         return true;
       });
     }
@@ -14967,7 +14971,8 @@
         ($('filterGrupo') && $('filterGrupo').value) ||
         ($('filterFacilitador') && $('filterFacilitador').value) ||
         ($('filterAlumnoId') && $('filterAlumnoId').value) ||
-        (state.ui && state.ui.planeacionesMateriaFilter)
+        (state.ui && state.ui.planeacionesMateriaFilter) ||
+        (state.ui && state.ui.planeacionesTallerFilter)
       );
     }
 
