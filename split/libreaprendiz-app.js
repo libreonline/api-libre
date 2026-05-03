@@ -2354,12 +2354,14 @@
       const grupoFilter = $('filterGrupo').value;
       const facilitadorFilter = $('filterFacilitador').value;
       const alumnoFilter = $('filterAlumnoId').value;
+      const materiaFilter = String((state.ui && state.ui.planeacionesMateriaFilter) || '').trim();
       const tallerFilter = String((state.ui && state.ui.planeacionesTallerFilter) || '').trim();
       if (semanaFilter) payload.semana_id = semanaFilter;
       if (estadoFilter) payload.estado = estadoFilter;
       if (grupoFilter) payload.grupo_id = grupoFilter;
       if (facilitadorFilter) payload.facilitador_id = facilitadorFilter;
       if (alumnoFilter) payload.alumno_id = alumnoFilter;
+      if (materiaFilter) payload.materia_id = materiaFilter;
       if (tallerFilter) payload.taller_id = tallerFilter;
       return payload;
     }
@@ -2371,6 +2373,7 @@
         grupo_id: String(($('filterGrupo') && $('filterGrupo').value) || '').trim(),
         facilitador_id: String(($('filterFacilitador') && $('filterFacilitador').value) || '').trim(),
         alumno_id: String(($('filterAlumnoId') && $('filterAlumnoId').value) || '').trim(),
+        materia_id: String((state.ui && state.ui.planeacionesMateriaFilter) || '').trim(),
         taller_id: String((state.ui && state.ui.planeacionesTallerFilter) || '').trim()
       };
     }
@@ -2382,6 +2385,7 @@
         if (filters.estado && String(plan.estado || '').trim() !== filters.estado) return false;
         if (filters.grupo_id && String(plan.grupo_id || '').trim() !== filters.grupo_id) return false;
         if (filters.facilitador_id && String(plan.facilitador_id || '').trim() !== filters.facilitador_id) return false;
+        if (filters.materia_id && String(plan.materia_id || '').trim() !== filters.materia_id) return false;
         if (filters.taller_id && String(plan.taller_id || '').trim() !== filters.taller_id) return false;
         return true;
       });
@@ -2457,7 +2461,8 @@
           state.ui.planeacionesHasMore = !!data.has_more;
           // A2: si esta carga vino sin filtros, guardarla como base list para usos posteriores
           const noFiltersActive = !activeFilters.semana_id && !activeFilters.estado &&
-            !activeFilters.grupo_id && !activeFilters.facilitador_id && !activeFilters.alumno_id;
+            !activeFilters.grupo_id && !activeFilters.facilitador_id && !activeFilters.alumno_id &&
+            !activeFilters.materia_id && !activeFilters.taller_id;
           if (!append && noFiltersActive) {
             updatePlaneacionesUnfilteredBaseFromCurrent(!!data.has_more);
           }
