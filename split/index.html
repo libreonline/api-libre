@@ -2854,6 +2854,9 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
     }
+    .admin-reporte-ciclo-grid.is-date-range {
+      grid-template-columns: minmax(240px, 1.2fr) repeat(2, minmax(150px, 0.8fr));
+    }
     .admin-reporte-ciclo-grid select,
     .admin-reporte-ciclo-grid input {
       background: rgba(29, 26, 24, 0.92) !important;
@@ -3323,6 +3326,7 @@
     }
     @media (max-width: 820px) {
       .admin-reporte-ciclo-grid,
+      .admin-reporte-ciclo-grid.is-date-range,
       .admin-reporte-ciclo-summary {
         grid-template-columns: 1fr;
       }
@@ -5644,7 +5648,7 @@
           <div class="admin-alumnos-head admin-reporte-ciclo-head">
             <div class="admin-alumnos-head-copy admin-reporte-ciclo-copy">
               <h3>Reporte de ciclo</h3>
-              <p class="subtle">Genera, regenera y monitorea el PDF académico familiar por alumno y período sin salir del adminShell.</p>
+              <p class="subtle">Genera, regenera y monitorea el PDF académico familiar por alumno y rango de fechas sin salir del adminShell.</p>
             </div>
             <div class="admin-reporte-ciclo-kpis">
               <div class="admin-reporte-ciclo-kpi">
@@ -5652,8 +5656,8 @@
                 <span>Alumnos</span>
               </div>
               <div class="admin-reporte-ciclo-kpi">
-                <strong id="adminReporteKpiPeriodos">0</strong>
-                <span>Períodos</span>
+                <strong id="adminReporteKpiPeriodos">Sin rango</strong>
+                <span>Fechas</span>
               </div>
               <div class="admin-reporte-ciclo-kpi">
                 <strong id="adminReporteKpiPdf">Sin consulta</strong>
@@ -5665,14 +5669,18 @@
           <div class="admin-reporte-ciclo-layout">
             <div class="admin-reporte-ciclo-main">
               <div class="admin-reporte-ciclo-request">
-                <div class="admin-reporte-ciclo-grid">
+                <div class="admin-reporte-ciclo-grid is-date-range">
                   <div class="field">
                     <label for="adminReportAlumno">Alumno</label>
                     <select id="adminReportAlumno"></select>
                   </div>
                   <div class="field">
-                    <label for="adminReportPeriodo">Período</label>
-                    <select id="adminReportPeriodo"></select>
+                    <label for="adminReportFechaInicio">Desde</label>
+                    <input id="adminReportFechaInicio" type="date">
+                  </div>
+                  <div class="field">
+                    <label for="adminReportFechaFin">Hasta</label>
+                    <input id="adminReportFechaFin" type="date">
                   </div>
                 </div>
                 <div class="admin-reporte-ciclo-actions actions compact">
@@ -5705,7 +5713,7 @@
                         <strong id="adminReportPreviewAlumno">Selecciona un alumno</strong>
                         <span id="adminReportPreviewMeta">Grupo, matrícula y facilitadora se resolverán aquí.</span>
                       </div>
-                      <div class="admin-reporte-ciclo-badge" id="adminReportPreviewPeriodo">Período</div>
+                      <div class="admin-reporte-ciclo-badge" id="adminReportPreviewPeriodo">Rango</div>
                     </div>
                     <div class="admin-reporte-ciclo-preview-section">
                       <div class="admin-reporte-ciclo-preview-section-head">
@@ -5715,7 +5723,7 @@
                       </div>
                       <div class="admin-reporte-ciclo-preview-row">
                         <span class="is-done">✓</span>
-                        <div>Actividad registrada del período</div>
+                        <div>Actividad registrada en el rango</div>
                         <small>Sem 1</small>
                       </div>
                       <div class="admin-reporte-ciclo-preview-row">
@@ -6108,7 +6116,7 @@
     </div>
   </div>
 
-<script defer src="./libreaprendiz-app.js?v=20260503-fac-plan-group-scope-v1"></script>
+<script defer src="./libreaprendiz-app.js?v=20260503-admin-report-date-range-v1"></script>
 </body>
 </html>
 

@@ -185,6 +185,8 @@
       return {
         alumno_id: '',
         periodo_id: '',
+        fecha_inicio: '',
+        fecha_fin: '',
         lastResult: null
       };
     }
@@ -940,7 +942,37 @@
 
     function getSelectedReportePeriodoId() {
       const ui = getReportSelectionState();
-      return String(ui.periodo_id || $('adminReportPeriodo') && $('adminReportPeriodo').value || $('repPeriodo') && $('repPeriodo').value || '').trim();
+      return String(ui.periodo_id || $('repPeriodo') && $('repPeriodo').value || '').trim();
+    }
+
+    function getSelectedReporteFechaInicio() {
+      const ui = getReportSelectionState();
+      return toYmdFrontend_(ui.fecha_inicio || $('adminReportFechaInicio') && $('adminReportFechaInicio').value || '');
+    }
+
+    function getSelectedReporteFechaFin() {
+      const ui = getReportSelectionState();
+      return toYmdFrontend_(ui.fecha_fin || $('adminReportFechaFin') && $('adminReportFechaFin').value || '');
+    }
+
+    function getReporteRangoLabel(fechaInicio, fechaFin) {
+      const start = toYmdFrontend_(fechaInicio);
+      const end = toYmdFrontend_(fechaFin);
+      if (!start || !end) return '';
+      if (start === end) return formatFechaCorta(start);
+      return formatFechaCorta(start) + ' - ' + formatFechaCorta(end);
+    }
+
+    function isReporteDateRangeMode(mode) {
+      return mode === 'admin-date-range';
+    }
+
+    function getReporteActionKeyParts(mode) {
+      const alumnoId = getSelectedReporteAlumnoId();
+      if (isReporteDateRangeMode(mode)) {
+        return [alumnoId, getSelectedReporteFechaInicio(), getSelectedReporteFechaFin()];
+      }
+      return [alumnoId, getSelectedReportePeriodoId()];
     }
 
     function setReporteSelection(field, value) {
@@ -951,8 +983,28 @@
       }
       ui[field] = nextValue;
       const alumnoSelectIds = ['repAlumno', 'adminReportAlumno'];
-      const periodoSelectIds = ['repPeriodo', 'adminReportPeriodo'];
-      (field === 'alumno_id' ? alumnoSelectIds : periodoSelectIds).forEach((id) => {
+      const syncIdsByField = {
+        alumno_id: alumnoSelectIds,
+        periodo_id: ['repPeriodo'],
+        fecha_inicio: ['adminReportFechaInicio'],
+        fecha_fin: ['adminReportFechaFin']
+      };
+
+      if (field === 'periodo_id' && nextValue) {
+        ui.fecha_inicio = '';
+        ui.fecha_fin = '';
+        ['adminReportFechaInicio', 'adminReportFechaFin'].forEach((id) => {
+          const el = $(id);
+          if (el) el.value = '';
+        });
+      }
+      if ((field === 'fecha_inicio' || field === 'fecha_fin') && nextValue) {
+        ui.periodo_id = '';
+        const periodEl = $('repPeriodo');
+        if (periodEl) periodEl.value = '';
+      }
+
+      (syncIdsByField[field] || []).forEach((id) => {
         const el = $(id);
         if (el) el.value = ui[field];
       });
@@ -990,19 +1042,23 @@
       const periodo = data && data._selection && data._selection.periodo_id
         ? (state.catalogos.periodos || []).find((row) => String(row.periodo_id || '').trim() === data._selection.periodo_id)
         : getSelectedReportePeriodoRow();
+      const selectionRangeLabel = data && data._selection
+        ? getReporteRangoLabel(data._selection.fecha_inicio, data._selection.fecha_fin)
+        : getReporteRangoLabel(getSelectedReporteFechaInicio(), getSelectedReporteFechaFin());
       const alumnoLabel = alumno ? getAlumnoNameLabel(alumno) : '';
       const periodoLabel = periodo ? (periodo.nombre_visible || periodo.periodo_id) : '';
+      const rangeOrPeriodoLabel = selectionRangeLabel || periodoLabel;
 
       if (!data) {
         return compact
           ? '<div class="subtle">Todav&iacute;a no hay una consulta de reporte.</div>'
-          : '<div class="admin-reporte-ciclo-result-empty"><div><strong>A&uacute;n no hay una consulta activa.</strong><div class="subtle">Selecciona alumno y per&iacute;odo para generar o revisar el PDF.</div></div></div>';
+          : '<div class="admin-reporte-ciclo-result-empty"><div><strong>A&uacute;n no hay una consulta activa.</strong><div class="subtle">Selecciona alumno y rango de fechas para generar o revisar el PDF.</div></div></div>';
       }
 
       const status = String(data.status || data.estado || '').trim().toLowerCase();
       const rows = [
         alumnoLabel ? '<div class="admin-reporte-ciclo-result-row"><span>Alumno</span><strong>' + escapeHtml(alumnoLabel + ' - ' + getAlumnoCompactId(alumno)) + '</strong></div>' : '',
-        periodoLabel ? '<div class="admin-reporte-ciclo-result-row"><span>Per&iacute;odo</span><strong>' + escapeHtml(periodoLabel) + '</strong></div>' : '',
+        rangeOrPeriodoLabel ? '<div class="admin-reporte-ciclo-result-row"><span>' + (selectionRangeLabel ? 'Rango' : 'Per&iacute;odo') + '</span><strong>' + escapeHtml(rangeOrPeriodoLabel) + '</strong></div>' : '',
         data.url ? '<div class="admin-reporte-ciclo-result-row"><span>PDF</span><strong><a class="link-out" href="' + escapeHtml(data.url) + '" target="_blank" rel="noopener noreferrer">Abrir reporte</a></strong></div>' : '',
         data.version_datos ? '<div class="admin-reporte-ciclo-result-row"><span>Versi&oacute;n de datos</span><div class="code">' + escapeHtml(data.version_datos) + '</div></div>' : '',
         data.version_pdf ? '<div class="admin-reporte-ciclo-result-row"><span>Versi&oacute;n PDF</span><div class="code">' + escapeHtml(data.version_pdf) + '</div></div>' : '',
@@ -3446,20 +3502,21 @@
           '<div class="admin-alumnos-head admin-reporte-ciclo-head">',
             '<div class="admin-alumnos-head-copy admin-reporte-ciclo-copy">',
               '<h3>Reporte de ciclo</h3>',
-              '<p class="subtle">Genera, regenera y monitorea el PDF acad&eacute;mico familiar por alumno y per&iacute;odo sin salir del adminShell.</p>',
+              '<p class="subtle">Genera, regenera y monitorea el PDF acad&eacute;mico familiar por alumno y rango de fechas sin salir del adminShell.</p>',
             '</div>',
             '<div class="admin-reporte-ciclo-kpis">',
               '<div class="admin-reporte-ciclo-kpi"><strong id="adminReporteKpiAlumnos">0</strong><span>Alumnos</span></div>',
-              '<div class="admin-reporte-ciclo-kpi"><strong id="adminReporteKpiPeriodos">0</strong><span>Per&iacute;odos</span></div>',
+              '<div class="admin-reporte-ciclo-kpi"><strong id="adminReporteKpiPeriodos">Sin rango</strong><span>Fechas</span></div>',
               '<div class="admin-reporte-ciclo-kpi"><strong id="adminReporteKpiPdf">Sin consulta</strong><span>&Uacute;ltimo estado</span></div>',
             '</div>',
           '</div>',
           '<div class="admin-reporte-ciclo-layout">',
             '<div class="admin-reporte-ciclo-main">',
               '<div class="admin-reporte-ciclo-request">',
-                '<div class="admin-reporte-ciclo-grid">',
+                '<div class="admin-reporte-ciclo-grid is-date-range">',
                   '<div class="field"><label for="adminReportAlumno">Alumno</label><select id="adminReportAlumno"></select></div>',
-                  '<div class="field"><label for="adminReportPeriodo">Per&iacute;odo</label><select id="adminReportPeriodo"></select></div>',
+                  '<div class="field"><label for="adminReportFechaInicio">Desde</label><input id="adminReportFechaInicio" type="date"></div>',
+                  '<div class="field"><label for="adminReportFechaFin">Hasta</label><input id="adminReportFechaFin" type="date"></div>',
                 '</div>',
                 '<div class="admin-reporte-ciclo-actions actions compact">',
                   '<button id="adminGenerateNowBtn" class="btn-primary" type="button">Solicitar / actualizar</button>',
@@ -3475,10 +3532,10 @@
                   '<div class="admin-reporte-ciclo-preview-sheet">',
                     '<div class="admin-reporte-ciclo-preview-header"><div class="admin-reporte-ciclo-preview-logo">LA</div><div><strong>Libre Aprendiz</strong><span>Reporte acad&eacute;mico para familias</span></div></div>',
                     '<div class="admin-reporte-ciclo-preview-strip"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>',
-                    '<div class="admin-reporte-ciclo-preview-block"><div><strong id="adminReportPreviewAlumno">Selecciona un alumno</strong><span id="adminReportPreviewMeta">Grupo, matr&iacute;cula y facilitadora se resolver&aacute;n aqu&iacute;.</span></div><div class="admin-reporte-ciclo-badge" id="adminReportPreviewPeriodo">Per&iacute;odo</div></div>',
+                    '<div class="admin-reporte-ciclo-preview-block"><div><strong id="adminReportPreviewAlumno">Selecciona un alumno</strong><span id="adminReportPreviewMeta">Grupo, matr&iacute;cula y facilitadora se resolver&aacute;n aqu&iacute;.</span></div><div class="admin-reporte-ciclo-badge" id="adminReportPreviewPeriodo">Rango</div></div>',
                     '<div class="admin-reporte-ciclo-preview-section">',
                       '<div class="admin-reporte-ciclo-preview-section-head"><div class="admin-reporte-ciclo-dot"></div><strong>ACTIVIDADES POR MATERIA</strong><span>Estado de realizaci&oacute;n</span></div>',
-                      '<div class="admin-reporte-ciclo-preview-row"><span class="is-done">&#10003;</span><div>Actividad registrada del periodo</div><small>Sem 1</small></div>',
+                      '<div class="admin-reporte-ciclo-preview-row"><span class="is-done">&#10003;</span><div>Actividad registrada en el rango</div><small>Sem 1</small></div>',
                       '<div class="admin-reporte-ciclo-preview-row"><span class="is-pending"></span><div>Actividad pendiente o sin dato visible</div><small>Sem 2</small></div>',
                       '<div class="admin-reporte-ciclo-preview-row"><span class="is-no">&times;</span><div>Actividad marcada como no realizada</div><small>Sem 3</small></div>',
                     '</div>',
@@ -3518,21 +3575,25 @@
         setReporteSelection('alumno_id', event.currentTarget.value);
         renderAdminReporteCicloModule();
       });
-      bind('adminReportPeriodo', 'change', (event) => {
-        setReporteSelection('periodo_id', event.currentTarget.value);
+      bind('adminReportFechaInicio', 'change', (event) => {
+        setReporteSelection('fecha_inicio', event.currentTarget.value);
         renderAdminReporteCicloModule();
       });
-      bind('adminGenerateNowBtn', 'click', (event) => handleAction('requestReporteAlumno', generateReportNow, {
+      bind('adminReportFechaFin', 'change', (event) => {
+        setReporteSelection('fecha_fin', event.currentTarget.value);
+        renderAdminReporteCicloModule();
+      });
+      bind('adminGenerateNowBtn', 'click', (event) => handleAction('requestReporteAlumno', () => generateReportNow('admin-date-range'), {
         button: event.currentTarget,
-        key: buildActionKey('requestReporteAlumno', [getSelectedReporteAlumnoId(), getSelectedReportePeriodoId()])
+        key: buildActionKey('requestReporteAlumno', getReporteActionKeyParts('admin-date-range'))
       }));
-      bind('adminRequestReportBtn', 'click', (event) => handleAction('regenerarReporteAlumno', requestReport, {
+      bind('adminRequestReportBtn', 'click', (event) => handleAction('regenerarReporteAlumno', () => requestReport('admin-date-range'), {
         button: event.currentTarget,
-        key: buildActionKey('regenerarReporteAlumno', [getSelectedReporteAlumnoId(), getSelectedReportePeriodoId()])
+        key: buildActionKey('regenerarReporteAlumno', getReporteActionKeyParts('admin-date-range'))
       }));
-      bind('adminStatusReportBtn', 'click', (event) => handleAction('getReporteAlumnoStatus', checkReportStatus, {
+      bind('adminStatusReportBtn', 'click', (event) => handleAction('getReporteAlumnoStatus', () => checkReportStatus('admin-date-range'), {
         button: event.currentTarget,
-        key: buildActionKey('getReporteAlumnoStatus', [getSelectedReporteAlumnoId(), getSelectedReportePeriodoId()])
+        key: buildActionKey('getReporteAlumnoStatus', getReporteActionKeyParts('admin-date-range'))
       }));
     }
 
@@ -12838,32 +12899,30 @@
       if (rebuiltTemplate) bindAdminReporteCicloTemplateEvents();
       const ui = getReportSelectionState();
       const alumnos = state.catalogos.alumnos || [];
-      const periodos = getAvailablePeriods();
       const adminAlumno = $('adminReportAlumno');
-      const adminPeriodo = $('adminReportPeriodo');
+      const adminFechaInicio = $('adminReportFechaInicio');
+      const adminFechaFin = $('adminReportFechaFin');
       const selectedAlumno = getSelectedReporteAlumnoRow();
-      const selectedPeriodo = getSelectedReportePeriodoRow();
+      const selectedRangeLabel = getReporteRangoLabel(ui.fecha_inicio, ui.fecha_fin);
 
       if (adminAlumno) {
         fillSelect(adminAlumno, alumnos, (row) => row.alumno_id, (row) => getAlumnoSelectLabel(row), 'Selecciona alumno');
         if (ui.alumno_id) adminAlumno.value = ui.alumno_id;
       }
-      if (adminPeriodo) {
-        fillSelect(adminPeriodo, periodos, (row) => row.id, (row) => row.id + ' - ' + row.name, 'Selecciona per\u00edodo');
-        if (ui.periodo_id) adminPeriodo.value = ui.periodo_id;
-      }
+      if (adminFechaInicio) adminFechaInicio.value = ui.fecha_inicio || '';
+      if (adminFechaFin) adminFechaFin.value = ui.fecha_fin || '';
       if ($('repAlumno') && ui.alumno_id) $('repAlumno').value = ui.alumno_id;
       if ($('repPeriodo') && ui.periodo_id) $('repPeriodo').value = ui.periodo_id;
 
       if ($('adminReporteKpiAlumnos')) $('adminReporteKpiAlumnos').textContent = String(alumnos.length || 0);
-      if ($('adminReporteKpiPeriodos')) $('adminReporteKpiPeriodos').textContent = String(periodos.length || 0);
+      if ($('adminReporteKpiPeriodos')) $('adminReporteKpiPeriodos').textContent = selectedRangeLabel ? 'Rango listo' : 'Sin rango';
       if ($('adminReporteKpiPdf')) $('adminReporteKpiPdf').textContent = getReportStatusLabel(ui.lastResult && (ui.lastResult.status || ui.lastResult.estado) || 'sin consulta');
 
       if ($('adminReportSelectionSummary')) {
         $('adminReportSelectionSummary').innerHTML = [
           '<div class="admin-reporte-ciclo-summary-card"><span>Alumno seleccionado</span><strong>' + escapeHtml(selectedAlumno ? getAlumnoNameLabel(selectedAlumno) : 'Sin selecci\u00f3n') + '</strong></div>',
           '<div class="admin-reporte-ciclo-summary-card"><span>Grupo / matr\u00edcula</span><strong>' + escapeHtml(selectedAlumno ? ((selectedAlumno.grupo_id || '-') + ' - ' + getAlumnoSecondaryLabel(selectedAlumno)) : 'Pendiente') + '</strong></div>',
-          '<div class="admin-reporte-ciclo-summary-card"><span>Per\u00edodo</span><strong>' + escapeHtml(selectedPeriodo ? (selectedPeriodo.nombre_visible || selectedPeriodo.periodo_id || '') : 'Sin selecci\u00f3n') + '</strong></div>'
+          '<div class="admin-reporte-ciclo-summary-card"><span>Rango de fechas</span><strong>' + escapeHtml(selectedRangeLabel || 'Sin selecci\u00f3n') + '</strong></div>'
         ].join('');
       }
       if ($('adminReportPreviewAlumno')) {
@@ -12875,7 +12934,7 @@
           : 'Grupo, matr\u00edcula y facilitadora se resolver\u00e1n aqu\u00ed.';
       }
       if ($('adminReportPreviewPeriodo')) {
-        $('adminReportPreviewPeriodo').textContent = selectedPeriodo ? (selectedPeriodo.nombre_visible || selectedPeriodo.periodo_id || 'Per\u00edodo') : 'Per\u00edodo';
+        $('adminReportPreviewPeriodo').textContent = selectedRangeLabel || 'Rango';
       }
 
       const adminHost = $('adminReportResult');
@@ -13616,20 +13675,47 @@
       setBanner('Nota de direcci\u00f3n guardada.', 'success');
     }
 
-    async function generateReportNow() {
+    function buildReporteAlumnoRequest(mode, requestPrefix) {
       ensureLoggedIn();
       ensureCanUseReportes();
-      ensureBackendPeriodsReady();
       const alumnoId = getSelectedReporteAlumnoId();
-      const periodoId = getSelectedReportePeriodoId();
       if (!alumnoId) throw new Error('Selecciona un alumno.');
+
+      if (isReporteDateRangeMode(mode)) {
+        const fechaInicio = getSelectedReporteFechaInicio();
+        const fechaFin = getSelectedReporteFechaFin();
+        if (!fechaInicio || !fechaFin) throw new Error('Selecciona fecha inicial y fecha final.');
+        if (fechaInicio > fechaFin) throw new Error('La fecha inicial no puede ser posterior a la fecha final.');
+        const payload = {
+          alumno_id: alumnoId,
+          fecha_inicio: fechaInicio,
+          fecha_fin: fechaFin
+        };
+        if (requestPrefix) payload.request_id = uid(requestPrefix);
+        return {
+          payload,
+          selection: { alumno_id: alumnoId, fecha_inicio: fechaInicio, fecha_fin: fechaFin }
+        };
+      }
+
+      ensureBackendPeriodsReady();
+      const periodoId = getSelectedReportePeriodoId();
       if (!periodoId) throw new Error('Selecciona un per\u00edodo.');
-      const data = await api('requestReporteAlumno', {
+      const payload = {
         alumno_id: alumnoId,
-        periodo_id: periodoId,
-        request_id: uid('REP')
-      });
-      data._selection = { alumno_id: alumnoId, periodo_id: periodoId };
+        periodo_id: periodoId
+      };
+      if (requestPrefix) payload.request_id = uid(requestPrefix);
+      return {
+        payload,
+        selection: { alumno_id: alumnoId, periodo_id: periodoId }
+      };
+    }
+
+    async function generateReportNow(mode) {
+      const request = buildReporteAlumnoRequest(mode, 'REP');
+      const data = await api('requestReporteAlumno', request.payload);
+      data._selection = request.selection;
       renderReportResult(data);
       if (data.status === 'listo' && data.url) {
         setBanner('El reporte ya estaba vigente y listo para abrir.', 'success');
@@ -13638,20 +13724,10 @@
       setBanner('Solicitud registrada. El worker generar\u00e1 o actualizar\u00e1 el reporte en segundo plano.', 'success');
     }
 
-    async function requestReport() {
-      ensureLoggedIn();
-      ensureCanUseReportes();
-      ensureBackendPeriodsReady();
-      const alumnoId = getSelectedReporteAlumnoId();
-      const periodoId = getSelectedReportePeriodoId();
-      if (!alumnoId) throw new Error('Selecciona un alumno.');
-      if (!periodoId) throw new Error('Selecciona un per\u00edodo.');
-      const data = await api('regenerarReporteAlumno', {
-        alumno_id: alumnoId,
-        periodo_id: periodoId,
-        request_id: uid('RRG')
-      });
-      data._selection = { alumno_id: alumnoId, periodo_id: periodoId };
+    async function requestReport(mode) {
+      const request = buildReporteAlumnoRequest(mode, 'RRG');
+      const data = await api('regenerarReporteAlumno', request.payload);
+      data._selection = request.selection;
       renderReportResult(data);
       if (data.status === 'listo' && data.url) {
         setBanner('Reporte regenerado y listo para abrir.', 'success');
@@ -13660,19 +13736,10 @@
       setBanner('Regeneraci\u00f3n forzada registrada. El worker armar\u00e1 una nueva versi\u00f3n del PDF.', 'success');
     }
 
-    async function checkReportStatus() {
-      ensureLoggedIn();
-      ensureCanUseReportes();
-      ensureBackendPeriodsReady();
-      const alumnoId = getSelectedReporteAlumnoId();
-      const periodoId = getSelectedReportePeriodoId();
-      if (!alumnoId) throw new Error('Selecciona un alumno.');
-      if (!periodoId) throw new Error('Selecciona un per\u00edodo.');
-      const data = await api('getReporteAlumnoStatus', {
-        alumno_id: alumnoId,
-        periodo_id: periodoId
-      });
-      data._selection = { alumno_id: alumnoId, periodo_id: periodoId };
+    async function checkReportStatus(mode) {
+      const request = buildReporteAlumnoRequest(mode);
+      const data = await api('getReporteAlumnoStatus', request.payload);
+      data._selection = request.selection;
       renderReportResult(data);
       setBanner('Estado de reporte actualizado.', data.status === 'listo' ? 'success' : 'info');
     }
@@ -16148,33 +16215,37 @@
         setReporteSelection('alumno_id', event.currentTarget.value);
         renderAdminReporteCicloModule();
       });
-      if ($('adminReportPeriodo')) $('adminReportPeriodo').addEventListener('change', (event) => {
-        setReporteSelection('periodo_id', event.currentTarget.value);
+      if ($('adminReportFechaInicio')) $('adminReportFechaInicio').addEventListener('change', (event) => {
+        setReporteSelection('fecha_inicio', event.currentTarget.value);
         renderAdminReporteCicloModule();
       });
-      $('generateNowBtn').addEventListener('click', (event) => handleAction('requestReporteAlumno', generateReportNow, {
+      if ($('adminReportFechaFin')) $('adminReportFechaFin').addEventListener('change', (event) => {
+        setReporteSelection('fecha_fin', event.currentTarget.value);
+        renderAdminReporteCicloModule();
+      });
+      $('generateNowBtn').addEventListener('click', (event) => handleAction('requestReporteAlumno', () => generateReportNow('legacy-period'), {
         button: event.currentTarget,
         key: buildActionKey('requestReporteAlumno', [getSelectedReporteAlumnoId(), getSelectedReportePeriodoId()])
       }));
-      $('requestReportBtn').addEventListener('click', (event) => handleAction('regenerarReporteAlumno', requestReport, {
+      $('requestReportBtn').addEventListener('click', (event) => handleAction('regenerarReporteAlumno', () => requestReport('legacy-period'), {
         button: event.currentTarget,
         key: buildActionKey('regenerarReporteAlumno', [getSelectedReporteAlumnoId(), getSelectedReportePeriodoId()])
       }));
-      $('statusReportBtn').addEventListener('click', (event) => handleAction('getReporteAlumnoStatus', checkReportStatus, {
+      $('statusReportBtn').addEventListener('click', (event) => handleAction('getReporteAlumnoStatus', () => checkReportStatus('legacy-period'), {
         button: event.currentTarget,
         key: buildActionKey('getReporteAlumnoStatus', [getSelectedReporteAlumnoId(), getSelectedReportePeriodoId()])
       }));
-      if ($('adminGenerateNowBtn')) $('adminGenerateNowBtn').addEventListener('click', (event) => handleAction('requestReporteAlumno', generateReportNow, {
+      if ($('adminGenerateNowBtn')) $('adminGenerateNowBtn').addEventListener('click', (event) => handleAction('requestReporteAlumno', () => generateReportNow('admin-date-range'), {
         button: event.currentTarget,
-        key: buildActionKey('requestReporteAlumno', [getSelectedReporteAlumnoId(), getSelectedReportePeriodoId()])
+        key: buildActionKey('requestReporteAlumno', getReporteActionKeyParts('admin-date-range'))
       }));
-      if ($('adminRequestReportBtn')) $('adminRequestReportBtn').addEventListener('click', (event) => handleAction('regenerarReporteAlumno', requestReport, {
+      if ($('adminRequestReportBtn')) $('adminRequestReportBtn').addEventListener('click', (event) => handleAction('regenerarReporteAlumno', () => requestReport('admin-date-range'), {
         button: event.currentTarget,
-        key: buildActionKey('regenerarReporteAlumno', [getSelectedReporteAlumnoId(), getSelectedReportePeriodoId()])
+        key: buildActionKey('regenerarReporteAlumno', getReporteActionKeyParts('admin-date-range'))
       }));
-      if ($('adminStatusReportBtn')) $('adminStatusReportBtn').addEventListener('click', (event) => handleAction('getReporteAlumnoStatus', checkReportStatus, {
+      if ($('adminStatusReportBtn')) $('adminStatusReportBtn').addEventListener('click', (event) => handleAction('getReporteAlumnoStatus', () => checkReportStatus('admin-date-range'), {
         button: event.currentTarget,
-        key: buildActionKey('getReporteAlumnoStatus', [getSelectedReporteAlumnoId(), getSelectedReportePeriodoId()])
+        key: buildActionKey('getReporteAlumnoStatus', getReporteActionKeyParts('admin-date-range'))
       }));
       if ($('adminNotificationNewBtn')) $('adminNotificationNewBtn').addEventListener('click', () => openNotificationEditor());
       if ($('adminNotificationFilterActiveBtn')) $('adminNotificationFilterActiveBtn').addEventListener('click', () => setNotificationFilter('activas'));
