@@ -96,6 +96,8 @@
         facilitador_id: '',
         grupo_id: '',
         materia_id: '',
+        taller_id: '',
+        tipo: 'grupo',
         activa: true,
         fecha_inicio: '',
         fecha_fin: ''
@@ -765,7 +767,7 @@
         case 'reportes':
           return ['alumnos', 'periodos'];
         case 'facilitadores':
-          return ['facilitadores', 'facilitadores_admin', 'facilitador_asignaciones', 'grupos', 'materias', 'semanas'];
+          return ['facilitadores', 'facilitadores_admin', 'facilitador_asignaciones', 'grupos', 'materias', 'semanas', 'talleres_admin'];
         case 'materias':
           return ['materias', 'materias_admin', 'submaterias', 'submaterias_admin'];
         case 'talleres':
@@ -5735,6 +5737,7 @@
         facilitador_id: String(merged.facilitador_id || '').trim(),
         grupo_id: String(merged.grupo_id || '').trim(),
         materia_id: String(merged.materia_id || '').trim(),
+        taller_id: String(merged.taller_id || '').trim(),
         activa: merged.activa === undefined ? true : merged.activa,
         fecha_inicio: toYmdFrontend_(merged.fecha_inicio || ''),
         fecha_fin: toYmdFrontend_(merged.fecha_fin || ''),
@@ -5780,6 +5783,7 @@
           facilitador_id: String(row.facilitador_id || '').trim(),
           grupo_id: String(row.grupo_id || '').trim(),
           materia_id: String(row.materia_id || '').trim(),
+          taller_id: String(row.taller_id || '').trim(),
           activa: isTruthyValue(row.activa),
           fecha_inicio: toYmdFrontend_(row.fecha_inicio || ''),
           fecha_fin: toYmdFrontend_(row.fecha_fin || ''),
@@ -5791,11 +5795,15 @@
           archivada_por: String(row.archivada_por || row.archivado_por || '').trim()
         }))
         .sort((a, b) => {
-          const materiaA = ((state.catalogos.materias || []).find((item) => item.materia_id === a.materia_id) || {}).nombre || a.materia_id;
-          const materiaB = ((state.catalogos.materias || []).find((item) => item.materia_id === b.materia_id) || {}).nombre || b.materia_id;
-          const labelA = getGrupoNombre(a.grupo_id) + ' ' + materiaA;
-          const labelB = getGrupoNombre(b.grupo_id) + ' ' + materiaB;
-          return String(labelA || '').localeCompare(String(labelB || ''), 'es');
+          const getLabel = (asig) => {
+            if (asig.taller_id) {
+              const taller = ((state.catalogos.talleres_admin || state.catalogos.talleres || []).find((t) => t.taller_id === asig.taller_id) || {});
+              return taller.nombre || asig.taller_id;
+            }
+            const materiaNombre = ((state.catalogos.materias || []).find((item) => item.materia_id === asig.materia_id) || {}).nombre || asig.materia_id;
+            return getGrupoNombre(asig.grupo_id) + ' ' + materiaNombre;
+          };
+          return String(getLabel(a) || '').localeCompare(String(getLabel(b) || ''), 'es');
         });
     }
 
@@ -5937,10 +5945,15 @@
 
     function getFacilitadorPlanForCell(facilitadorId, asignacion, semanaId) {
       const matches = getFacilitadorPulsePlaneaciones(facilitadorId).filter((plan) => {
-        return String(plan.facilitador_id || '').trim() === String(facilitadorId || '').trim() &&
-          String(plan.grupo_id || '').trim() === String(asignacion.grupo_id || '').trim() &&
-          String(plan.materia_id || '').trim() === String(asignacion.materia_id || '').trim() &&
-          String(plan.semana_id || '').trim() === String(semanaId || '').trim();
+        if (String(plan.facilitador_id || '').trim() !== String(facilitadorId || '').trim()) return false;
+        if (String(plan.semana_id || '').trim() !== String(semanaId || '').trim()) return false;
+        // Asignación tipo taller: buscar plan por taller_id
+        if (asignacion.taller_id) {
+          return String(plan.taller_id || '').trim() === asignacion.taller_id;
+        }
+        // Asignación tipo grupo: buscar plan por grupo_id + materia_id
+        return String(plan.grupo_id || '').trim() === String(asignacion.grupo_id || '').trim() &&
+               String(plan.materia_id || '').trim() === String(asignacion.materia_id || '').trim();
       });
       if (!matches.length) return null;
       return matches.sort((a, b) => String(b.fecha_actualizacion || b.fecha_creacion || '').localeCompare(String(a.fecha_actualizacion || a.fecha_creacion || '')))[0] || null;
@@ -6326,7 +6339,17 @@
         return '<div class="admin-alumnos-empty" style="min-height:140px;"><div><strong>Sin asignaciones activas.</strong><div class="subtle">Agrega grupo y materia para medir faltantes con confianza.</div></div></div>';
       }
       return rows.map((row) => {
-        const materia = (state.catalogos.materias || []).find((item) => item.materia_id === row.materia_id);
+        let rowLabel;
+        let verBtn;
+        if (row.taller_id) {
+          const taller = (state.catalogos.talleres_admin || state.catalogos.talleres || []).find((t) => t.taller_id === row.taller_id);
+          rowLabel = 'Taller: ' + ((taller && taller.nombre) || row.taller_id);
+          verBtn = '<button class="btn-secondary" type="button" onclick="openFacilitadorPlaneaciones(\'' + escapeJsAttrValue(state.facilitadoresUi.selectedFacilitadorId) + '\', \'\', \'\', \'' + escapeJsAttrValue(row.taller_id) + '\')">Ver</button>';
+        } else {
+          const materia = (state.catalogos.materias || []).find((item) => item.materia_id === row.materia_id);
+          rowLabel = getGrupoNombre(row.grupo_id) + ' \u00b7 ' + ((materia && materia.nombre) || row.materia_id);
+          verBtn = '<button class="btn-secondary" type="button" onclick="openFacilitadorPlaneaciones(\'' + escapeJsAttrValue(state.facilitadoresUi.selectedFacilitadorId) + '\', \'' + escapeJsAttrValue(row.grupo_id) + '\', \'' + escapeJsAttrValue(row.materia_id) + '\')">Ver</button>';
+        }
         const periodo = [
           row.fecha_inicio ? ('Desde ' + formatFechaHumana(row.fecha_inicio)) : '',
           row.fecha_fin ? ('Hasta ' + formatFechaHumana(row.fecha_fin)) : ''
@@ -6334,12 +6357,12 @@
         return [
           '<article class="admin-facilitadores-assignment-item">',
             '<div class="admin-facilitadores-assignment-copy">',
-              '<strong>' + escapeHtml(getGrupoNombre(row.grupo_id)) + ' &middot; ' + escapeHtml((materia && materia.nombre) || row.materia_id) + '</strong>',
+              '<strong>' + escapeHtml(rowLabel) + '</strong>',
               '<div class="mini">' + escapeHtml(periodo) + '</div>',
             '</div>',
             '<div class="admin-facilitadores-assignment-actions">',
           '<button class="btn-ghost" type="button" onclick="openFacilitadorAsignacionEditor(\'edit\', \'' + escapeJsAttrValue(row.asignacion_id) + '\')">Editar</button>',
-          '<button class="btn-secondary" type="button" onclick="openFacilitadorPlaneaciones(\'' + escapeJsAttrValue(state.facilitadoresUi.selectedFacilitadorId) + '\', \'' + escapeJsAttrValue(row.grupo_id) + '\', \'' + escapeJsAttrValue(row.materia_id) + '\')">Ver</button>',
+          verBtn,
           '<button class="btn-accent" type="button" onclick="archiveFacilitadorAsignacion(this, \'' + escapeJsAttrValue(row.asignacion_id) + '\')">Quitar</button>',
             '</div>',
           '</article>'
@@ -6368,18 +6391,36 @@
 
     function renderFacilitadorAsignacionEditor() {
       const asign = state.facilitadoresUi.asignacion || createEmptyFacilitadorAsignacionState();
+      const esTaller = !!(asign.taller_id || asign.tipo === 'taller');
       return [
         '<section id="adminFacilitadorAsignacionEditorPanel" class="admin-alumnos-panel">',
-          '<div class="admin-alumnos-panel-head"><div><h4>' + escapeHtml(asign.asignacion_id ? 'Editar asignaci\u00f3n' : 'Nueva asignaci\u00f3n') + '</h4><div class="subtle">Define grupo, materia y vigencia para medir el cumplimiento semanal.</div></div></div>',
+          '<div class="admin-alumnos-panel-head"><div><h4>' + escapeHtml(asign.asignacion_id ? 'Editar asignaci\u00f3n' : 'Nueva asignaci\u00f3n') + '</h4><div class="subtle">Define grupo+materia o taller y vigencia para medir el cumplimiento semanal.</div></div></div>',
           '<div class="admin-alumnos-mini-grid">',
-            '<label class="field">',
-              '<span>Grupo</span>',
-              '<select id="adminFacilitadorAsignacionGrupo"></select>',
+            '<label class="field admin-alumnos-field-full">',
+              '<span>Tipo de asignaci\u00f3n</span>',
+              '<select id="adminFacilitadorAsignacionTipo" onchange="onFacilitadorAsignacionTipoChange(this.value)">',
+                '<option value="grupo"' + (!esTaller ? ' selected' : '') + '>Grupo + Materia</option>',
+                '<option value="taller"' + (esTaller ? ' selected' : '') + '>Taller</option>',
+              '</select>',
             '</label>',
-            '<label class="field">',
-              '<span>Materia</span>',
-              '<select id="adminFacilitadorAsignacionMateria"></select>',
-            '</label>',
+            '<div id="adminFacilitadorAsignacionGrupoBlock"' + (esTaller ? ' style="display:none"' : '') + '>',
+              '<label class="field">',
+                '<span>Grupo</span>',
+                '<select id="adminFacilitadorAsignacionGrupo"></select>',
+              '</label>',
+            '</div>',
+            '<div id="adminFacilitadorAsignacionMateriaBlock"' + (esTaller ? ' style="display:none"' : '') + '>',
+              '<label class="field">',
+                '<span>Materia</span>',
+                '<select id="adminFacilitadorAsignacionMateria"></select>',
+              '</label>',
+            '</div>',
+            '<div id="adminFacilitadorAsignacionTallerBlock"' + (!esTaller ? ' style="display:none"' : '') + '>',
+              '<label class="field">',
+                '<span>Taller</span>',
+                '<select id="adminFacilitadorAsignacionTaller"></select>',
+              '</label>',
+            '</div>',
             '<label class="field">',
               '<span>Fecha de inicio</span>',
               '<input id="adminFacilitadorAsignacionInicio" type="date">',
@@ -6395,6 +6436,17 @@
           '</div>',
         '</section>'
       ].join('');
+    }
+
+    function onFacilitadorAsignacionTipoChange(tipo) {
+      const grupoBlock = $('adminFacilitadorAsignacionGrupoBlock');
+      const materiaBlock = $('adminFacilitadorAsignacionMateriaBlock');
+      const tallerBlock = $('adminFacilitadorAsignacionTallerBlock');
+      if (!grupoBlock || !materiaBlock || !tallerBlock) return;
+      const esTaller = tipo === 'taller';
+      grupoBlock.style.display   = esTaller ? 'none' : '';
+      materiaBlock.style.display = esTaller ? 'none' : '';
+      tallerBlock.style.display  = esTaller ? '' : 'none';
     }
 
     function renderFacilitadorMatrix(facilitadorId) {
@@ -6437,10 +6489,17 @@
             }).join(''),
           '</div>',
           asignaciones.map((asignacion) => {
-            const materia = (state.catalogos.materias || []).find((item) => item.materia_id === asignacion.materia_id);
+            let matrixLabel;
+            if (asignacion.taller_id) {
+              const taller = (state.catalogos.talleres_admin || state.catalogos.talleres || []).find((t) => t.taller_id === asignacion.taller_id);
+              matrixLabel = 'Taller: ' + ((taller && taller.nombre) || asignacion.taller_id);
+            } else {
+              const materia = (state.catalogos.materias || []).find((item) => item.materia_id === asignacion.materia_id);
+              matrixLabel = getGrupoNombre(asignacion.grupo_id) + ' · ' + ((materia && materia.nombre) || asignacion.materia_id);
+            }
             return [
               '<div class="admin-facilitadores-matrix-row">',
-                '<div class="admin-facilitadores-matrix-label">' + escapeHtml(getGrupoNombre(asignacion.grupo_id)) + ' &middot; ' + escapeHtml((materia && materia.nombre) || asignacion.materia_id) + '</div>',
+                '<div class="admin-facilitadores-matrix-label">' + escapeHtml(matrixLabel) + '</div>',
                 semanas.map((semana) => {
                   const cell = getFacilitadorMatrixCellState(facilitadorId, asignacion, semana);
                   const css = cell.code === 'ok' ? 'is-ok' :
@@ -6704,6 +6763,8 @@
         facilitador_id: current.facilitador_id,
         grupo_id: current.grupo_id,
         materia_id: current.materia_id,
+        taller_id: current.taller_id || '',
+        tipo: current.taller_id ? 'taller' : 'grupo',
         activa: current.activa,
         fecha_inicio: current.fecha_inicio || '',
         fecha_fin: current.fecha_fin || ''
@@ -6712,18 +6773,26 @@
         facilitador_id: facilitadorId,
         grupo_id: '',
         materia_id: '',
+        taller_id: '',
+        tipo: 'grupo',
         activa: true,
         fecha_inicio: '',
         fecha_fin: ''
       };
       renderAdminFacilitadoresModule();
+      const talleresCat = (state.catalogos.talleres_admin || state.catalogos.talleres || []).filter((t) => {
+        if (!t || String(t.archivado_at || '').trim()) return false;
+        return String(t.facilitador_id || '').trim() === facilitadorId;
+      });
       fillSelect($('adminFacilitadorAsignacionGrupo'), state.catalogos.grupos || [], (item) => item.grupo_id, (item) => getGrupoDisplayName(item), 'Selecciona grupo');
       fillSelect($('adminFacilitadorAsignacionMateria'), state.catalogos.materias || [], (item) => item.materia_id, (item) => item.nombre || item.materia_id, 'Selecciona materia');
+      fillSelect($('adminFacilitadorAsignacionTaller'), talleresCat, (item) => item.taller_id, (item) => item.nombre || item.taller_id, 'Selecciona taller');
       if ($('adminFacilitadorAsignacionGrupo')) $('adminFacilitadorAsignacionGrupo').value = state.facilitadoresUi.asignacion.grupo_id || '';
       if ($('adminFacilitadorAsignacionMateria')) $('adminFacilitadorAsignacionMateria').value = state.facilitadoresUi.asignacion.materia_id || '';
+      if ($('adminFacilitadorAsignacionTaller')) $('adminFacilitadorAsignacionTaller').value = state.facilitadoresUi.asignacion.taller_id || '';
       if ($('adminFacilitadorAsignacionInicio')) $('adminFacilitadorAsignacionInicio').value = state.facilitadoresUi.asignacion.fecha_inicio || '';
       if ($('adminFacilitadorAsignacionFin')) $('adminFacilitadorAsignacionFin').value = state.facilitadoresUi.asignacion.fecha_fin || '';
-      focusAdminFacilitadorPanel('adminFacilitadorAsignacionEditorPanel', 'adminFacilitadorAsignacionGrupo');
+      focusAdminFacilitadorPanel('adminFacilitadorAsignacionEditorPanel', 'adminFacilitadorAsignacionTipo');
     }
 
     function closeFacilitadorAsignacionPanel() {
@@ -6733,11 +6802,14 @@
 
     async function saveFacilitadorAsignacion(button) {
       const facilitadorId = String(state.facilitadoresUi.selectedFacilitadorId || '').trim();
+      const tipo = $('adminFacilitadorAsignacionTipo') ? $('adminFacilitadorAsignacionTipo').value : 'grupo';
+      const esTaller = tipo === 'taller';
       const payload = {
         asignacion_id: state.facilitadoresUi.asignacion.asignacion_id || '',
         facilitador_id: facilitadorId,
-        grupo_id: $('adminFacilitadorAsignacionGrupo') ? $('adminFacilitadorAsignacionGrupo').value : '',
-        materia_id: $('adminFacilitadorAsignacionMateria') ? $('adminFacilitadorAsignacionMateria').value : '',
+        grupo_id:   esTaller ? '' : ($('adminFacilitadorAsignacionGrupo') ? $('adminFacilitadorAsignacionGrupo').value : ''),
+        materia_id: esTaller ? '' : ($('adminFacilitadorAsignacionMateria') ? $('adminFacilitadorAsignacionMateria').value : ''),
+        taller_id:  esTaller ? ($('adminFacilitadorAsignacionTaller') ? $('adminFacilitadorAsignacionTaller').value : '') : '',
         fecha_inicio: $('adminFacilitadorAsignacionInicio') ? $('adminFacilitadorAsignacionInicio').value : '',
         fecha_fin: $('adminFacilitadorAsignacionFin') ? $('adminFacilitadorAsignacionFin').value : '',
         activa: true,
@@ -6745,14 +6817,19 @@
       };
       await handleAction('guardarFacilitadorAsignacion', async () => {
         if (!facilitadorId) throw new Error('Selecciona un facilitador.');
-        if (!payload.grupo_id) throw new Error('Selecciona un grupo.');
-        if (!payload.materia_id) throw new Error('Selecciona una materia.');
+        if (esTaller) {
+          if (!payload.taller_id) throw new Error('Selecciona un taller.');
+        } else {
+          if (!payload.grupo_id) throw new Error('Selecciona un grupo.');
+          if (!payload.materia_id) throw new Error('Selecciona una materia.');
+        }
         const data = await api('guardarFacilitadorAsignacion', payload);
         applySavedFacilitadorAsignacionCatalogRow({
           asignacion_id: data && data.asignacion_id ? data.asignacion_id : (payload.asignacion_id || uid('FASLOCAL')),
           facilitador_id: facilitadorId,
-          grupo_id: payload.grupo_id,
+          grupo_id:   payload.grupo_id,
           materia_id: payload.materia_id,
+          taller_id:  payload.taller_id,
           activa: true,
           fecha_inicio: payload.fecha_inicio || '',
           fecha_fin: payload.fecha_fin || '',
@@ -6767,7 +6844,7 @@
         setBanner('Asignaci\u00f3n guardada.', 'success');
       }, {
         button,
-        key: buildActionKey('guardarFacilitadorAsignacion', [facilitadorId, payload.grupo_id, payload.materia_id, payload.asignacion_id || 'new']),
+        key: buildActionKey('guardarFacilitadorAsignacion', [facilitadorId, payload.taller_id || payload.grupo_id, payload.materia_id || '', payload.asignacion_id || 'new']),
         busyText: 'Guardando...'
       });
     }
