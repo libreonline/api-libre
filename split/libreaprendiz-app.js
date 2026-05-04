@@ -6918,7 +6918,7 @@
         const titularFac = getFacilitadorById(sup.facilitador_titular_id);
         const titularNombre = titularFac
           ? (titularFac.nombre_mostrado || titularFac.nombre_completo || sup.facilitador_titular_id)
-          : 'titular';
+          : (sup.facilitador_titular_id || 'titular');
         let assignLabel = getSuplenciaLabel(sup);
         assignLabel = assignLabel.replace(/\bMAT-MIG-([A-Z0-9_-]+)/gi, function(_, value) {
           return String(value || '').replace(/[-_]+/g, ' ');
@@ -6953,7 +6953,7 @@
               : estado === 'cierre_pendiente' ? 'Cierre'
               : estado === 'archivada' ? 'Archivada'
               : 'Borrador';
-            const suplenciaBadge = isPlanCreatedBySuplencia(plan)
+            const suplenciaBadge = (isPlanCreatedBySuplencia(plan) || getCurrentFacilitadorSuplenciaForPlan(plan))
               ? '<span class="facilitador-suplencias-mini-badge">Suplencia</span>' : '';
             return '<div class="facilitador-suplencias-cell"><button class="facilitador-suplencias-week-chip is-clickable" type="button" onclick="openPlanLocalInstant(\'' + escapeJsAttrValue(plan.planeacion_id) + '\')" title="' + semanaLabel + '"><span class="facilitador-suplencias-week-label">' + semanaLabel + '</span><span class="facilitador-matrix-state ' + stateClass + '">' + escapeHtml(stateLabel) + '</span>' + suplenciaBadge + '</button></div>';
           }
@@ -9497,19 +9497,10 @@
     }
 
     function getPlanSuplenciaBadgeHtml(plan, hasAdminPower) {
-      if (isPlanCreatedBySuplencia(plan)) {
-        if (hasAdminPower && plan.facilitador_suplente_id) {
-          const suplente = (state.catalogos.facilitadores || []).find((f) => f.facilitador_id === plan.facilitador_suplente_id);
-          const supNombre = suplente ? (suplente.nombre || suplente.facilitador_id) : plan.facilitador_suplente_id;
-          return '<span class="badge badge-suplencia">Suplencia por ' + escapeHtml(supNombre) + '</span>';
-        }
+      if (isPlanCreatedBySuplencia(plan) || getCurrentFacilitadorSuplenciaForPlan(plan)) {
         return '<span class="badge badge-suplencia">Suplencia</span>';
       }
-      const suplencia = getCurrentFacilitadorSuplenciaForPlan(plan);
-      if (!suplencia) return '';
-      const titular = getFacilitadorById(suplencia.facilitador_titular_id);
-      const titularNombre = titular ? (titular.nombre_mostrado || titular.nombre_completo || suplencia.facilitador_titular_id) : '';
-      return '<span class="badge badge-suplencia is-coverage">' + (titularNombre ? 'Cubriendo a ' + escapeHtml(titularNombre) : 'Cubriendo titular') + '</span>';
+      return '';
     }
 
     function getPlanLocalFeedbackMarkup(plan) {
