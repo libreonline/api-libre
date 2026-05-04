@@ -12406,6 +12406,7 @@
         const showSeguimientoFields = String(plan.estado || '').trim() === 'activa';
         const localState = getPlanLocalSaveState(plan);
         const isOpenSaveBusy = localState === 'saving';
+        const materiaOptions = getOpenPlanMateriaOptions(plan, selectedMateriaId);
         const openFieldIds = {
           fecha: getOpenPlanInlineFieldId(plan, 'fecha'),
           materia: getOpenPlanInlineFieldId(plan, 'materia'),
@@ -12457,7 +12458,7 @@
             '<div class="plan-date-detected-field"><label>Fecha:</label><input id="' + escapeHtml(openFieldIds.fecha) + '" type="date" value="' + escapeHtml(displayFechaPlaneacion || '') + '" oninput="updateOpenPlanDraftField(\'fecha_planeacion\', this.value, true)" onchange="updateOpenPlanDraftField(\'fecha_planeacion\', this.value, true)"><div class="plan-date-inline-meta"><div class="plan-date-resolved-head">Semana:</div><div class="inline-note ' + (week && String(week.cerrada_global || '').toLowerCase() === 'si' ? 'is-closed' : 'is-open') + '">' + escapeHtml(weekText) + '</div></div></div>' +
             '<div><label>Materia</label><select id="' + escapeHtml(openFieldIds.materia) + '" onchange="updateOpenPlanDraftField(\'materia_id\', this.value, true)">' +
               '<option value="">Selecciona materia</option>' +
-              (state.catalogos.materias || []).map((item) => '<option value="' + escapeHtml(item.materia_id) + '"' + (String(item.materia_id || '') === selectedMateriaId ? ' selected' : '') + '>' + escapeHtml(item.nombre || item.materia_id) + '</option>').join('') +
+              materiaOptions.map((item) => '<option value="' + escapeHtml(item.materia_id) + '"' + (String(item.materia_id || '') === selectedMateriaId ? ' selected' : '') + '>' + escapeHtml(item.nombre || item.materia_id) + '</option>').join('') +
             '</select></div>' +
             (submaterias.length
               ? '<div><label>Submateria</label><select id="' + escapeHtml(openFieldIds.submateria) + '" onchange="updateOpenPlanDraftField(\'submateria_id\', this.value, true)">' +
@@ -12498,6 +12499,31 @@
           '</div>' +
         '</div>'
       );
+    }
+
+    function getOpenPlanMateriaOptions(plan, selectedMateriaId) {
+      const selectedId = String(selectedMateriaId || '').trim();
+      const options = (Array.isArray(state.catalogos.materias) ? state.catalogos.materias : [])
+        .map((item) => Object.assign({}, item, { materia_id: String(item && item.materia_id || '').trim() }))
+        .filter((item) => item.materia_id);
+      if (selectedId && !options.some((item) => item.materia_id === selectedId)) {
+        options.push({
+          materia_id: selectedId,
+          nombre: getOpenPlanMateriaFallbackName(plan, selectedId)
+        });
+      }
+      return options;
+    }
+
+    function getOpenPlanMateriaFallbackName(plan, materiaId) {
+      const id = String(materiaId || '').trim();
+      if (!id) return '';
+      const known = (state.catalogos.materias_admin || state.catalogos.materias || [])
+        .find((item) => String(item && item.materia_id || '').trim() === id);
+      if (known && known.nombre) return known.nombre;
+      const planLabel = String(plan && (plan.materia_nombre || plan.materia || '') || '').trim();
+      if (planLabel && planLabel !== id) return planLabel;
+      return id.replace(/^MAT-MIG-/i, '').replace(/[-_]+/g, ' ');
     }
 
     function renderPlaneacionesList() {
