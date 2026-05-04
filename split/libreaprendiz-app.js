@@ -6885,25 +6885,43 @@
       const semanas = getFacilitadorRecentWeeks();
       if (!semanas.length) return '';
 
+      const isSemanaInSuplenciaRange = (semana, sup) => {
+        const sInicio = toYmdFrontend_(semana.fecha_inicio || '');
+        const sFin = toYmdFrontend_(semana.fecha_fin || '');
+        const supInicio = String(sup.fecha_inicio || '').trim();
+        const supFin = String(sup.fecha_fin || '').trim();
+        if (!sInicio || !sFin || !supInicio || !supFin) return false;
+        return supInicio <= sFin && supFin >= sInicio;
+      };
+
+      const semanaHeaders = semanas.filter((semana) => {
+        return suplencias.some((sup) => isSemanaInSuplenciaRange(semana, sup));
+      });
+      if (!semanaHeaders.length) return '';
+
       const rows = suplencias.map((sup) => {
-        const semanasEnRango = semanas.filter((s) => {
-          const sInicio = toYmdFrontend_(s.fecha_inicio || '');
-          const sFin = toYmdFrontend_(s.fecha_fin || '');
-          const supInicio = String(sup.fecha_inicio || '').trim();
-          const supFin = String(sup.fecha_fin || '').trim();
-          if (!sInicio || !sFin || !supInicio || !supFin) return false;
-          return supInicio <= sFin && supFin >= sInicio;
-        });
+        const semanasEnRango = semanaHeaders.filter((semana) => isSemanaInSuplenciaRange(semana, sup));
         if (!semanasEnRango.length) return null;
 
         const titularFac = getFacilitadorById(sup.facilitador_titular_id);
         const titularNombre = titularFac
           ? (titularFac.nombre_mostrado || titularFac.nombre_completo || sup.facilitador_titular_id)
           : sup.facilitador_titular_id;
-        const assignLabel = getSuplenciaLabel(sup);
-        const rowLabel = escapeHtml(assignLabel) + ' <span class="mini">(Titular: ' + escapeHtml(titularNombre) + ')</span>';
+        let assignLabel = getSuplenciaLabel(sup);
+        assignLabel = assignLabel.replace(/\bMAT-MIG-([A-Z0-9_-]+)/gi, function(_, value) {
+          return String(value || '').replace(/[-_]+/g, ' ');
+        });
+        const rowLabel = [
+          '<div class="facilitador-suplencias-label">',
+            '<strong>' + escapeHtml(assignLabel) + '</strong>',
+            '<span class="mini">Titular: ' + escapeHtml(titularNombre) + '</span>',
+          '</div>'
+        ].join('');
 
-        const cells = semanasEnRango.map((semana) => {
+        const cells = semanaHeaders.map((semana) => {
+          if (!isSemanaInSuplenciaRange(semana, sup)) {
+            return '<div class="facilitador-suplencias-cell"><span class="facilitador-matrix-state is-missing" title="Fuera de rango">—</span></div>';
+          }
           const plan = (Array.isArray(state.planeaciones) ? state.planeaciones : []).find((p) => {
             if (String(p.semana_id || '').trim() !== String(semana.semana_id || '').trim()) return false;
             if (String(p.facilitador_id || '').trim() !== String(sup.facilitador_titular_id || '').trim()) return false;
@@ -6911,7 +6929,7 @@
             return String(p.grupo_id || '').trim() === sup.grupo_id &&
                    String(p.materia_id || '').trim() === sup.materia_id;
           });
-          const semanaLabel = escapeHtml(semana.nombre_visible || semana.semana_id || '');
+          const semanaLabel = escapeHtml(formatSemanaLabel(semana));
           if (plan) {
             const estado = String(plan.estado || '').trim();
             const stateClass = estado === 'cerrada' || estado === 'archivada' ? 'is-closed'
@@ -6925,42 +6943,38 @@
               : 'Borrador';
             const suplenciaBadge = plan.creada_por_suplencia === 'si' || plan.facilitador_suplente_id
               ? ' <span class="plan-badge-suplencia">Suplencia</span>' : '';
-            return '<td><span class="facilitador-matrix-state ' + stateClass + '" style="cursor:pointer" onclick="openPlanLocalInstant(\'' + escapeJsAttrValue(plan.planeacion_id) + '\')" title="' + semanaLabel + '">' + escapeHtml(stateLabel) + suplenciaBadge + '</span></td>';
-          } else {
-            return '<td><button class="btn-ghost" style="font-size:0.78rem;padding:2px 8px" type="button" onclick="cubrirSuplencia(this, \'' + escapeJsAttrValue(sup.suplencia_id) + '\', \'' + escapeJsAttrValue(semana.semana_id) + '\')">Cubrir</button></td>';
+            return '<div class="facilitador-suplencias-cell"><span class="facilitador-matrix-state ' + stateClass + '" onclick="openPlanLocalInstant(\'' + escapeJsAttrValue(plan.planeacion_id) + '\')" title="' + semanaLabel + '">' + escapeHtml(stateLabel) + suplenciaBadge + '</span></div>';
           }
+          return '<div class="facilitador-suplencias-cell"><button class="btn-ghost facilitador-suplencias-cover-btn" type="button" onclick="cubrirSuplencia(this, \'' + escapeJsAttrValue(sup.suplencia_id) + '\', \'' + escapeJsAttrValue(semana.semana_id) + '\')">Cubrir</button></div>';
         }).join('');
 
-        return '<tr><td style="white-space:nowrap;max-width:200px">' + rowLabel + '</td>' + cells + '</tr>';
+        return '<div class="facilitador-suplencias-row" style="grid-template-columns:' + escapeHtml(buildSuplenciasMatrixColumns(semanaHeaders.length)) + '">' +
+          '<div class="facilitador-suplencias-assignment">' + rowLabel + '</div>' +
+          cells +
+        '</div>';
       }).filter(Boolean);
 
       if (!rows.length) return '';
 
-      const semanaHeaders = semanas.filter((s) => {
-        return suplencias.some((sup) => {
-          const sInicio = toYmdFrontend_(s.fecha_inicio || '');
-          const sFin = toYmdFrontend_(s.fecha_fin || '');
-          const supInicio = String(sup.fecha_inicio || '').trim();
-          const supFin = String(sup.fecha_fin || '').trim();
-          if (!sInicio || !sFin || !supInicio || !supFin) return false;
-          return supInicio <= sFin && supFin >= sInicio;
-        });
-      });
+      const columnStyle = escapeHtml(buildSuplenciasMatrixColumns(semanaHeaders.length));
 
       return [
         '<div class="admin-alumnos-section-head"><div><h4>Suplencias activas</h4><div class="subtle">Planeaciones que puedes cubrir como suplente.</div></div></div>',
-        '<div class="admin-facilitadores-matrix-wrap" style="overflow-x:auto">',
-          '<table class="admin-facilitadores-matrix-table">',
-            '<thead><tr>',
-              '<th></th>',
-              semanaHeaders.map((s) => '<th>' + escapeHtml(s.nombre_visible || s.semana_id || '') + '</th>').join(''),
-            '</tr></thead>',
-            '<tbody>',
-              rows.join(''),
-            '</tbody>',
-          '</table>',
+        '<div class="facilitador-suplencias-scroll">',
+          '<div class="facilitador-suplencias-matrix">',
+            '<div class="facilitador-suplencias-header" style="grid-template-columns:' + columnStyle + '">',
+              '<div class="facilitador-suplencias-assignment">Asignaci&oacute;n</div>',
+              semanaHeaders.map((s) => '<div class="facilitador-suplencias-cell' + (isCurrentSemana(s) ? ' is-current-week' : '') + '">' + escapeHtml(formatSemanaLabel(s)) + '</div>').join(''),
+            '</div>',
+            rows.join(''),
+          '</div>',
         '</div>'
       ].join('');
+    }
+
+    function buildSuplenciasMatrixColumns(weekCount) {
+      const safeCount = Math.max(1, Math.min(8, Number(weekCount) || 1));
+      return 'minmax(168px, 1.15fr) repeat(' + safeCount + ', minmax(82px, 0.85fr))';
     }
 
     async function cubrirSuplencia(button, suplenciaId, semanaId) {

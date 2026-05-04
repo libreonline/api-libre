@@ -2592,6 +2592,85 @@
       color: var(--la-cyan);
       box-shadow: inset 0 -2px 0 rgba(82, 190, 229, 0.55);
     }
+    .facilitador-suplencias-scroll {
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .facilitador-suplencias-matrix {
+      min-width: 420px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(19, 25, 34, 0.88);
+      overflow: hidden;
+    }
+    .facilitador-suplencias-header,
+    .facilitador-suplencias-row {
+      display: grid;
+      min-width: 420px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .facilitador-suplencias-header {
+      color: #a9c7e6;
+      font-size: 0.72rem;
+      font-weight: 800;
+      border-bottom-color: rgba(255,255,255,0.1);
+    }
+    .facilitador-suplencias-row:last-child {
+      border-bottom: 0;
+    }
+    .facilitador-suplencias-assignment,
+    .facilitador-suplencias-cell {
+      min-width: 0;
+      min-height: 42px;
+      padding: 7px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .facilitador-suplencias-assignment {
+      justify-content: flex-start;
+      text-align: left;
+      border-right: 1px solid rgba(255,255,255,0.05);
+    }
+    .facilitador-suplencias-label {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+    .facilitador-suplencias-label strong,
+    .facilitador-suplencias-label .mini {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .facilitador-suplencias-label strong {
+      color: var(--text-strong);
+      font-size: 0.82rem;
+      line-height: 1.15;
+    }
+    .facilitador-suplencias-label .mini {
+      color: var(--text-soft);
+      font-size: 0.68rem;
+      line-height: 1.1;
+    }
+    .facilitador-suplencias-cell.is-current-week {
+      background: rgba(82, 190, 229, 0.1);
+      color: var(--la-cyan);
+      box-shadow: inset 0 -2px 0 rgba(82, 190, 229, 0.55);
+    }
+    .facilitador-suplencias-cell .facilitador-matrix-state[onclick] {
+      cursor: pointer;
+    }
+    .facilitador-suplencias-cover-btn {
+      min-height: 27px !important;
+      padding: 4px 9px !important;
+      border-radius: 999px !important;
+      font-size: 0.7rem !important;
+      font-weight: 800 !important;
+      white-space: nowrap;
+    }
     .admin-materias-kpis {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
@@ -6118,7 +6197,7 @@
     </div>
   </div>
 
-<script defer src="./libreaprendiz-app.js?v=20260503-admin-pulse-suplencias-v1"></script>
+<script defer src="./libreaprendiz-app.js?v=20260503-suplencias-layout-v1"></script>
 </body>
 </html>
 
