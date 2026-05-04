@@ -5925,6 +5925,13 @@
         .filter((row) => includeArchived || !String(row.archivada_at || '').trim());
     }
 
+    function getFacilitadorSuplenciasComoSuplente(facilitadorId, options = {}) {
+      const includeArchived = !!options.includeArchived;
+      return (Array.isArray(state.catalogos.suplencias) ? state.catalogos.suplencias : [])
+        .filter((row) => String(row.facilitador_suplente_id || '').trim() === String(facilitadorId || '').trim())
+        .filter((row) => includeArchived || !String(row.archivada_at || '').trim());
+    }
+
     function getSuplenciaLabel(suplencia) {
       if (!suplencia) return '';
       const tallerId = String(suplencia.taller_id || '').trim();
@@ -5956,6 +5963,51 @@
         archivada_por: String(row.archivada_por || '').trim()
       };
       upsertCatalogEntityRow('suplencias', 'suplencia_id', normalized);
+    }
+
+    function getFacilitadorPulseAssignments(facilitadorId) {
+      const ownRows = getFacilitadorAsignaciones(facilitadorId)
+        .filter((row) => row.activa)
+        .map((row) => Object.assign({}, row, {
+          _pulse_type: 'asignacion',
+          _pulse_plan_facilitador_id: String(facilitadorId || '').trim()
+        }));
+      const suplenciaRows = getFacilitadorSuplenciasComoSuplente(facilitadorId)
+        .filter((row) => row.activa)
+        .map((row) => ({
+          asignacion_id: 'SUP-' + String(row.suplencia_id || '').trim(),
+          facilitador_id: String(row.facilitador_suplente_id || '').trim(),
+          grupo_id: String(row.grupo_id || '').trim(),
+          materia_id: String(row.materia_id || '').trim(),
+          taller_id: String(row.taller_id || '').trim(),
+          activa: isTruthyValue(row.activa),
+          fecha_inicio: toYmdFrontend_(row.fecha_inicio || ''),
+          fecha_fin: toYmdFrontend_(row.fecha_fin || ''),
+          archivado_at: String(row.archivada_at || '').trim(),
+          archivada_at: String(row.archivada_at || '').trim(),
+          _pulse_type: 'suplencia',
+          _pulse_suplencia_id: String(row.suplencia_id || '').trim(),
+          _pulse_plan_facilitador_id: String(row.facilitador_titular_id || '').trim()
+        }));
+      return ownRows.concat(suplenciaRows);
+    }
+
+    function getFacilitadorPulseAssignmentLabel(asignacion) {
+      if (!asignacion) return '';
+      let baseLabel;
+      if (asignacion.taller_id) {
+        const taller = (state.catalogos.talleres_admin || state.catalogos.talleres || []).find((t) => t.taller_id === asignacion.taller_id);
+        baseLabel = 'Taller: ' + ((taller && (taller.nombre || taller.nombre_taller)) || asignacion.taller_id);
+      } else {
+        const materia = (state.catalogos.materias || state.catalogos.materias_admin || []).find((item) => item.materia_id === asignacion.materia_id);
+        baseLabel = getGrupoNombre(asignacion.grupo_id) + ' · ' + ((materia && materia.nombre) || asignacion.materia_id);
+      }
+      if (asignacion._pulse_type !== 'suplencia') return baseLabel;
+      const titular = getFacilitadorById(asignacion._pulse_plan_facilitador_id);
+      const titularNombre = titular
+        ? (titular.nombre_mostrado || titular.nombre_completo || asignacion._pulse_plan_facilitador_id)
+        : asignacion._pulse_plan_facilitador_id;
+      return 'Suplencia: ' + baseLabel + ' (titular: ' + titularNombre + ')';
     }
     // ─────────────────────────────────────────────────────
 
@@ -6096,8 +6148,11 @@
     }
 
     function getFacilitadorPlanForCell(facilitadorId, asignacion, semanaId) {
+      const expectedFacilitadorId = asignacion && asignacion._pulse_plan_facilitador_id
+        ? String(asignacion._pulse_plan_facilitador_id || '').trim()
+        : String(facilitadorId || '').trim();
       const matches = getFacilitadorPulsePlaneaciones(facilitadorId).filter((plan) => {
-        if (String(plan.facilitador_id || '').trim() !== String(facilitadorId || '').trim()) return false;
+        if (String(plan.facilitador_id || '').trim() !== expectedFacilitadorId) return false;
         if (String(plan.semana_id || '').trim() !== String(semanaId || '').trim()) return false;
         // Asignación tipo taller: buscar plan por taller_id
         if (asignacion.taller_id) {
@@ -6140,7 +6195,7 @@
     }
 
     function buildFacilitadorPulse(facilitadorId) {
-      const asignaciones = getFacilitadorAsignaciones(facilitadorId).filter((row) => row.activa);
+      const asignaciones = getFacilitadorPulseAssignments(facilitadorId);
       const semanas = getFacilitadorRecentWeeks();
       let esperadas = 0;
       let entregadas = 0;
@@ -6239,6 +6294,7 @@
       state.facilitadoresUi.pulsePlaneacionesError = '';
       api('getPlaneaciones', {
         facilitador_id: id,
+        include_suplencias_para_suplente: true,
         include_detail: false,
         limit: 500,
         offset: 0
@@ -6964,7 +7020,7 @@
 
     function renderFacilitadorMatrix(facilitadorId) {
       const semanas = getFacilitadorRecentWeeks();
-      const asignaciones = getFacilitadorAsignaciones(facilitadorId).filter((row) => row.activa);
+      const asignaciones = getFacilitadorPulseAssignments(facilitadorId);
       if (!asignaciones.length) {
         return '<div class="admin-alumnos-empty" style="min-height:160px;"><div><strong>Sin asignaciones activas.</strong><div class="subtle">Agrega grupo y materia para medir faltantes con confianza.</div></div></div>';
       }
@@ -7002,14 +7058,7 @@
             }).join(''),
           '</div>',
           asignaciones.map((asignacion) => {
-            let matrixLabel;
-            if (asignacion.taller_id) {
-              const taller = (state.catalogos.talleres_admin || state.catalogos.talleres || []).find((t) => t.taller_id === asignacion.taller_id);
-              matrixLabel = 'Taller: ' + ((taller && taller.nombre) || asignacion.taller_id);
-            } else {
-              const materia = (state.catalogos.materias || []).find((item) => item.materia_id === asignacion.materia_id);
-              matrixLabel = getGrupoNombre(asignacion.grupo_id) + ' · ' + ((materia && materia.nombre) || asignacion.materia_id);
-            }
+            const matrixLabel = getFacilitadorPulseAssignmentLabel(asignacion);
             return [
               '<div class="admin-facilitadores-matrix-row">',
                 '<div class="admin-facilitadores-matrix-label">' + escapeHtml(matrixLabel) + '</div>',
