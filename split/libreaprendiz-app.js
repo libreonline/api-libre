@@ -28,6 +28,7 @@
         aliasTouched: false,
         apellidos: '',
         grupo_id: '',
+        nivel_id: '',
         estatus: 'activo',
         notas_internas: ''
       };
@@ -4458,6 +4459,12 @@
       return row ? getGrupoDisplayName(row) : grupoId;
     }
 
+    function getAlumnoGrupoDisplayLabel(alumno) {
+      const base = getGrupoNombre(alumno && alumno.grupo_id);
+      const nivel = String(alumno && alumno.nivel_id || '').trim();
+      return nivel ? (base + ' · ' + nivel) : base;
+    }
+
     function getAlumnoStatusVisual(row) {
       const status = String(row && row.estatus || '').trim().toLowerCase();
       if (row && row.__archived) return 'archivado';
@@ -4504,6 +4511,7 @@
       if (previousGroup !== nextGroup) {
         changes.push('Grupo: ' + getGrupoNombre(previousGroup) + ' -> ' + getGrupoNombre(nextGroup) + '.');
       }
+      addTextChange('Nivel Poks', before.nivel_id, after.nivel_id);
       const previousStatus = getAlumnoStatusVisual(before);
       const nextStatus = getAlumnoStatusVisual({ estatus: after.estatus });
       if (previousStatus !== nextStatus) {
@@ -4574,6 +4582,7 @@
       normalized.nombre_completo = String(normalized.nombre_completo || '').trim();
       normalized.nombre_mostrado = String(normalized.nombre_mostrado || '').trim();
       normalized.grupo_id = String(normalized.grupo_id || '').trim();
+      normalized.nivel_id = String(normalized.nivel_id || '').trim();
       normalized.estatus = String(normalized.estatus || 'activo').trim().toLowerCase();
       normalized.fecha_alta = toYmdFrontend_(normalized.fecha_alta || '');
       normalized.fecha_baja = toYmdFrontend_(normalized.fecha_baja || '');
@@ -4816,6 +4825,7 @@
           editor.alias,
           editor.apellidos,
           editor.grupo_id,
+          editor.nivel_id,
           editor.notas_internas
         ].some((value) => String(value || '').trim()) || String(editor.estatus || 'activo').trim() !== 'activo';
       }
@@ -4828,6 +4838,7 @@
         fullName !== String(alumno.nombre_completo || '').trim() ||
         nextAlias !== String(alumno.nombre_mostrado || alumno.nombre_completo || '').trim() ||
         String(editor.grupo_id || '').trim() !== String(alumno.grupo_id || '').trim() ||
+        String(editor.nivel_id || '').trim() !== String(alumno.nivel_id || '').trim() ||
         String(editor.estatus || 'activo').trim() !== String(alumno.estatus || 'activo').trim() ||
         String(editor.notas_internas || '').trim() !== String(getAlumnoAdminNotes(alumno.alumno_id, alumno.notas_internas || '') || '').trim() ||
         String(editor.nombres || '').trim() !== String(split.nombres || alumno.nombre_mostrado || '').trim() ||
@@ -4978,6 +4989,7 @@
         aliasTouched: !!String(alumno.nombre_mostrado || '').trim(),
         apellidos: split.apellidos || '',
         grupo_id: alumno.grupo_id || '',
+        nivel_id: alumno.nivel_id || '',
         estatus: alumno.estatus || 'activo',
         notas_internas: getAlumnoAdminNotes(alumno.alumno_id, alumno.notas_internas || '')
       } : createEmptyAlumnoEditorState();
@@ -5013,6 +5025,7 @@
           nombre_completo: fullName,
           nombre_mostrado: composeAlumnoNombreMostrado(editor.nombres, editor.alias, fullName),
           grupo_id: String(editor.grupo_id || '').trim(),
+          nivel_id: String(editor.nivel_id || '').trim(),
           estatus: String(editor.estatus || 'activo').trim(),
           notas_internas: String(editor.notas_internas || '').trim()
         };
@@ -5614,6 +5627,7 @@
       if ($('adminAlumnoApellidos')) $('adminAlumnoApellidos').value = state.alumnosUi.editor.apellidos || '';
       if ($('adminAlumnoStatus')) $('adminAlumnoStatus').value = state.alumnosUi.editor.estatus || 'activo';
       if ($('adminAlumnoNotas')) $('adminAlumnoNotas').value = state.alumnosUi.editor.notas_internas || '';
+      if ($('adminAlumnoNivelOperativo')) $('adminAlumnoNivelOperativo').value = state.alumnosUi.editor.nivel_id || '';
       fillSelect($('adminAlumnoGrupo'), state.catalogos.grupos || [], (row) => row.grupo_id, (row) => getGrupoDisplayName(row), 'Selecciona grupo');
       if ($('adminAlumnoGrupo')) $('adminAlumnoGrupo').value = state.alumnosUi.editor.grupo_id || '';
       if ($('adminAlumnoIdentity')) {
@@ -5734,7 +5748,7 @@
           return '<article class="admin-alumnos-row">' +
             '<div class="admin-alumnos-cell"><div class="mini">' + escapeHtml(getAlumnoSecondaryLabel(row)) + '</div></div>' +
             '<div class="admin-alumnos-title"><button class="admin-alumnos-title-btn" type="button" onclick="openAlumnoHistorial(\'' + escapeJsAttrValue(row.alumno_id) + '\')">' + escapeHtml(getAlumnoNameLabel(row)) + '</button><div class="mini" title="' + escapeHtml(row.alumno_id || '') + '">ID: ' + escapeHtml(getAlumnoCompactId(row) || '-') + '</div></div>' +
-            '<div class="admin-alumnos-cell"><div class="mini">' + escapeHtml(getGrupoNombre(row.grupo_id)) + '</div></div>' +
+            '<div class="admin-alumnos-cell"><div class="mini">' + escapeHtml(getAlumnoGrupoDisplayLabel(row)) + '</div></div>' +
             '<div class="admin-alumnos-cell"><span class="admin-alumnos-badge ' + getAlumnoStatusBadgeClass(visualStatus) + '">' + escapeHtml(getAlumnoStatusLabel(visualStatus)) + '</span></div>' +
             '<div class="admin-alumnos-cell"><div class="mini">' + escapeHtml(row.fecha_alta ? formatFechaHumana(row.fecha_alta) : 'Sin fecha') + '</div></div>' +
             '<div class="admin-alumnos-cell"><div class="mini">' + escapeHtml(formatAlumnoUpdatedLabel(row)) + '</div></div>' +
@@ -5803,6 +5817,15 @@
                   '<label class="field">',
                     '<span>Grupo actual</span>',
                     '<select id="adminAlumnoGrupo"></select>',
+                  '</label>',
+                  '<label class="field">',
+                    '<span>Nivel Poks</span>',
+                    '<input id="adminAlumnoNivelOperativo" type="text" maxlength="50" list="adminAlumnoNivelOperativoOptions" placeholder="Opcional">',
+                    '<datalist id="adminAlumnoNivelOperativoOptions">',
+                      '<option value="Poks 1"></option>',
+                      '<option value="Poks 2"></option>',
+                      '<option value="Poks 3"></option>',
+                    '</datalist>',
                   '</label>',
                   '<label class="field">',
                     '<span>Nombre(s)</span>',
@@ -6097,6 +6120,7 @@
       });
       if ($('adminAlumnoApellidos')) $('adminAlumnoApellidos').addEventListener('input', (event) => { state.alumnosUi.editor.apellidos = event.currentTarget.value; });
       if ($('adminAlumnoGrupo')) $('adminAlumnoGrupo').addEventListener('change', (event) => { state.alumnosUi.editor.grupo_id = event.currentTarget.value; });
+      if ($('adminAlumnoNivelOperativo')) $('adminAlumnoNivelOperativo').addEventListener('input', (event) => { state.alumnosUi.editor.nivel_id = event.currentTarget.value; });
       if ($('adminAlumnoStatus')) $('adminAlumnoStatus').addEventListener('change', (event) => { state.alumnosUi.editor.estatus = event.currentTarget.value; });
       if ($('adminAlumnoNotas')) $('adminAlumnoNotas').addEventListener('input', (event) => { state.alumnosUi.editor.notas_internas = event.currentTarget.value; });
       if ($('adminAlumnoMedToggleBtn')) $('adminAlumnoMedToggleBtn').addEventListener('click', () => toggleAlumnoFichaMedica(true));
@@ -9511,6 +9535,7 @@
         lockedGrupoId: '',
         selectedSubmateriaId: '',
         selectedTallerId: '',
+        nivelOperativo: '',
         validationErrors: {},
         lastKnownUpdatedAt: '',
         lastKnownActivitiesVersion: '',
@@ -10037,7 +10062,7 @@
 
     function renderPlanEditorValidation() {
       const errors = getPlanEditorValidationErrors();
-      ['planFecha', 'planMateria', 'planSubmateria', 'planGruposChecklist', 'planAlumnosChecklist', 'planActivitiesList'].forEach((fieldId) => {
+      ['planFecha', 'planMateria', 'planSubmateria', 'planNivelOperativo', 'planGruposChecklist', 'planAlumnosChecklist', 'planActivitiesList'].forEach((fieldId) => {
         const target = $(fieldId);
         if (!target) return;
         const message = String(errors[fieldId] || '').trim();
@@ -10140,6 +10165,8 @@
       $('planFecha').value = '';
       $('planMateria').value = '';
       if ($('planSubmateria')) $('planSubmateria').value = '';
+      if ($('planNivelOperativo')) $('planNivelOperativo').value = '';
+      if ($('planNivelOperativoField')) $('planNivelOperativoField').hidden = true;
       $('planFrase').value = '';
       if ($('planGruposChecklist')) $('planGruposChecklist').innerHTML = '';
       if ($('planAlumnosChecklist')) $('planAlumnosChecklist').innerHTML = '';
@@ -10163,6 +10190,8 @@
       if ($('planFecha')) $('planFecha').value = '';
       if ($('planMateria')) $('planMateria').value = '';
       if ($('planSubmateria')) $('planSubmateria').value = '';
+      if ($('planNivelOperativo')) $('planNivelOperativo').value = '';
+      if ($('planNivelOperativoField')) $('planNivelOperativoField').hidden = true;
       if ($('planFrase')) $('planFrase').value = '';
       if ($('planGruposChecklist')) $('planGruposChecklist').innerHTML = '';
       if ($('planAlumnosChecklist')) $('planAlumnosChecklist').innerHTML = '';
@@ -10182,6 +10211,7 @@
         lockedGrupoId: plan.grupo_id,
         selectedSubmateriaId: plan.submateria_id || '',
         selectedTallerId: '',
+        nivelOperativo: normalizePlanNivelOperativo(plan.nivel_operativo || ''),
         lastKnownUpdatedAt: plan.fecha_actualizacion || '',
         lastKnownActivitiesVersion: plan.actividades_version_actual || '',
         activities: (plan.actividades || []).length ? (plan.actividades || []).map((actividad) => ({
@@ -10197,8 +10227,9 @@
       $('planFecha').value = getWeekStartDateForPlan(plan);
       $('planFrase').value = plan.frase_semana || '';
       $('planMateria').value = plan.materia_id || '';
-      syncPlanSubmateriaSelect(plan.submateria_id || '');
       renderPlanEditor();
+      syncPlanSubmateriaSelect(plan.submateria_id || '');
+      syncPlanNivelOperativoField({ preserveValue: true });
       renderPlanBuilderVisibility();
       Array.from($('planAlumnosChecklist').querySelectorAll('input[type="checkbox"]')).forEach((input) => {
         input.checked = (plan.alumnos || []).some((row) => row.alumno_id === input.value);
@@ -10236,6 +10267,7 @@
         materia_id: sourcePlan.materia_id || '',
         submateria_id: sourcePlan.submateria_id || '',
         taller_id: sourcePlan.taller_id || '',
+        nivel_operativo: normalizePlanNivelOperativo(sourcePlan.nivel_operativo || ''),
         alumnos_ids: (sourcePlan.alumnos || []).map((row) => row.alumno_id),
         original_alumnos_ids: (sourcePlan.alumnos || []).map((row) => row.alumno_id),
         activities: (sourcePlan.actividades || []).length ? (sourcePlan.actividades || []).map((actividad) => ({
@@ -10289,7 +10321,7 @@
         ? state.openPlanDraft
         : null;
       if (!nextDraft || !currentDraft) return nextDraft;
-      ['fecha_planeacion', 'frase_semana', 'materia_id', 'submateria_id', 'taller_id'].forEach((field) => {
+      ['fecha_planeacion', 'frase_semana', 'materia_id', 'submateria_id', 'taller_id', 'nivel_operativo'].forEach((field) => {
         if (currentDraft[field] !== undefined) nextDraft[field] = currentDraft[field];
       });
       if (Array.isArray(currentDraft.alumnos_ids)) {
@@ -11319,6 +11351,7 @@
         nextPlan.materia_id = request.materiaId;
         nextPlan.submateria_id = request.submateriaId;
         nextPlan.taller_id = request.tallerId || '';
+        nextPlan.nivel_operativo = normalizePlanNivelOperativo(request.nivelOperativo || draft.nivel_operativo || plan.nivel_operativo || '');
         nextPlan.frase_semana = String(draft.frase_semana || '').trim();
         nextPlan.alumnos = buildPlanAlumnoSnapshotsByIds(request.alumnosIds, plan.grupo_id, plan.alumnos);
         nextPlan.alumnos_count = nextPlan.alumnos.length;
@@ -11379,6 +11412,7 @@
       const materiaId = String(options.materiaId || '').trim();
       const submateriaId = String(options.submateriaId || '').trim();
       const tallerId = String(options.tallerId || '').trim();
+      const nivelOperativo = normalizePlanNivelOperativo(options.nivelOperativo || '');
       const semanaId = String((options.semana && options.semana.semana_id) || '').trim() || ('SEM_' + String(options.fechaPlaneacion || '').replace(/-/g, ''));
       const loteId = groupIds.length > 1 ? uid('TMPLTE') : '';
       const materiaRow = (state.catalogos.materias || []).find((item) => String(item.materia_id || '').trim() === materiaId) || null;
@@ -11399,6 +11433,7 @@
           materia_id: materiaId,
           submateria_id: submateriaId,
           taller_id: tallerId,
+          nivel_operativo: nivelOperativo,
           materia_nombre: materiaRow ? (materiaRow.nombre || materiaId) : materiaId,
           submateria_nombre: tallerId ? ((getTallerById(tallerId) || {}).nombre || tallerId) : (submateriaRow ? (submateriaRow.nombre || submateriaId) : ''),
           frase_semana: String(options.fraseSemana || '').trim(),
@@ -11466,6 +11501,7 @@
         materiaId,
         selectedSubmateriaId: getPlanEditorSelectedSubmateriaId(materiaId),
         selectedTallerId: getSelectedPlanTallerId(),
+        nivelOperativo: getPlanNivelOperativoValue(),
         fraseSemana: String(($('planFrase') && $('planFrase').value) || '').trim(),
         selectedGroupIds: getSelectedGroupIds(),
         selectedAlumnoIds: getSelectedPlanAlumnos()
@@ -11480,11 +11516,13 @@
       const materiaId = String((snapshot.materiaId || snapshot.materia_id || '').trim ? (snapshot.materiaId || snapshot.materia_id || '').trim() : (snapshot.materiaId || snapshot.materia_id || ''));
       const selectedSubmateriaId = String((snapshot.selectedSubmateriaId || snapshot.selected_submateria_id || '').trim ? (snapshot.selectedSubmateriaId || snapshot.selected_submateria_id || '').trim() : (snapshot.selectedSubmateriaId || snapshot.selected_submateria_id || ''));
       const selectedTallerId = String((snapshot.selectedTallerId || snapshot.selected_taller_id || '').trim ? (snapshot.selectedTallerId || snapshot.selected_taller_id || '').trim() : (snapshot.selectedTallerId || snapshot.selected_taller_id || ''));
+      const nivelOperativo = normalizePlanNivelOperativo(snapshot.nivelOperativo || snapshot.nivel_operativo || (editorState && editorState.nivelOperativo) || '');
       const selectedGroupIds = new Set((Array.isArray(snapshot.selectedGroupIds) ? snapshot.selectedGroupIds : []).map((groupId) => String(groupId || '').trim()).filter(Boolean));
       const selectedAlumnoIds = new Set((Array.isArray(snapshot.selectedAlumnoIds) ? snapshot.selectedAlumnoIds : []).map((alumnoId) => String(alumnoId || '').trim()).filter(Boolean));
       state.planEditor = cloneJsonSafe(editorState, editorState) || editorState;
       if (selectedSubmateriaId) state.planEditor.selectedSubmateriaId = selectedSubmateriaId;
       state.planEditor.selectedTallerId = selectedTallerId || '';
+      state.planEditor.nivelOperativo = nivelOperativo;
       if (state.ui) state.ui.planBuilderExpanded = true;
       renderPlanEditor();
       if ($('planFecha')) $('planFecha').value = String(snapshot.fechaPlaneacion || snapshot.fecha_planeacion || '').trim();
@@ -11502,6 +11540,7 @@
       Array.from($('planGruposChecklist').querySelectorAll('input[type="checkbox"]')).forEach((input) => {
         input.checked = selectedGroupIds.has(String(input.value || '').trim());
       });
+      syncPlanNivelOperativoField({ preserveValue: true });
       renderPlanAlumnosChecklist(selectedAlumnoIds);
       renderPlanBuilderVisibility();
     }
@@ -11922,6 +11961,60 @@
       return String(state.planEditor && state.planEditor.selectedTallerId || '').trim();
     }
 
+    function normalizePlanNivelOperativo(value) {
+      return String(value || '').trim();
+    }
+
+    function isPoksGroup(groupId) {
+      const id = String(groupId || '').trim();
+      const group = getCatalogIndex().gruposById.get(id);
+      const label = String((group && (group.nombre_grupo || group.grupo_id)) || id).trim();
+      return /poks/i.test(label);
+    }
+
+    function getPlanNivelOperativoValue() {
+      const select = $('planNivelOperativo');
+      return normalizePlanNivelOperativo(select ? select.value : (state.planEditor && state.planEditor.nivelOperativo));
+    }
+
+    function shouldShowPlanNivelOperativoField() {
+      if (getSelectedPlanTallerId()) return false;
+      const selectedGroups = getSelectedGroupIds();
+      if (state.planEditor.mode === 'edit' && !selectedGroups.length && state.planEditor.lockedGrupoId) {
+        return isPoksGroup(state.planEditor.lockedGrupoId);
+      }
+      return selectedGroups.some((groupId) => isPoksGroup(groupId));
+    }
+
+    function syncPlanNivelOperativoField(options = {}) {
+      const field = $('planNivelOperativoField');
+      const select = $('planNivelOperativo');
+      if (!field || !select) return;
+      const show = shouldShowPlanNivelOperativoField();
+      field.hidden = !show;
+      if (!show && options.preserveValue !== true) {
+        state.planEditor.nivelOperativo = '';
+        select.value = '';
+        clearPlanEditorValidation('planNivelOperativo');
+        return;
+      }
+      const current = normalizePlanNivelOperativo(state.planEditor && state.planEditor.nivelOperativo);
+      if (select.value !== current) select.value = current;
+    }
+
+    function getPlanGroupDisplayLabel(plan) {
+      const grupo = getGrupoById(plan && plan.grupo_id);
+      const base = grupo ? getGrupoDisplayName(grupo) : String(plan && plan.grupo_id || '').trim();
+      const nivel = normalizePlanNivelOperativo(plan && plan.nivel_operativo);
+      return nivel ? (base + ' · ' + nivel) : base;
+    }
+
+    function alumnoMatchesPlanNivelOperativo(alumno) {
+      const nivel = getPlanNivelOperativoValue();
+      if (!nivel) return true;
+      return String(alumno && alumno.nivel_id || '').trim().toLowerCase() === nivel.toLowerCase();
+    }
+
     function getPlanTallerAlumnoIdSet(tallerId) {
       const targetId = String(tallerId || '').trim();
       if (!targetId) return new Set();
@@ -11934,7 +12027,10 @@
     function getPlanEditorAlumnosByGroupId(groupId) {
       const alumnos = getAlumnosByGroupId(groupId);
       const tallerId = getSelectedPlanTallerId();
-      if (!tallerId) return alumnos;
+      if (!tallerId) {
+        if (!isPoksGroup(groupId)) return alumnos;
+        return alumnos.filter((alumno) => alumnoMatchesPlanNivelOperativo(alumno));
+      }
       const allowedAlumnoIds = getPlanTallerAlumnoIdSet(tallerId);
       if (!allowedAlumnoIds.size) return [];
       return alumnos.filter((alumno) => allowedAlumnoIds.has(String(alumno.alumno_id || '').trim()));
@@ -12103,7 +12199,16 @@
       clearPlanEditorValidation('planGruposChecklist');
       clearPlanEditorValidation('planAlumnosChecklist');
       const selected = applyGroupSelectionToAlumnoSet(new Set(getSelectedPlanAlumnos()), input.value, !!input.checked);
+      syncPlanNivelOperativoField();
       renderPlanAlumnosChecklist(selected);
+    }
+
+    function handlePlanNivelOperativoChanged(event) {
+      const select = event && event.currentTarget ? event.currentTarget : $('planNivelOperativo');
+      state.planEditor.nivelOperativo = normalizePlanNivelOperativo(select ? select.value : '');
+      clearPlanEditorValidation('planNivelOperativo');
+      clearPlanEditorValidation('planAlumnosChecklist');
+      renderPlanAlumnosChecklist(new Set());
     }
 
     function getOpenPlanInlineFieldId(plan, fieldName) {
@@ -12116,16 +12221,20 @@
       const select = event && event.currentTarget ? event.currentTarget : $('planSubmateria');
       const tallerId = select ? String(select.value || '').trim() : '';
       state.planEditor.selectedTallerId = tallerId;
+      if (tallerId) state.planEditor.nivelOperativo = '';
       clearPlanEditorValidation('planGruposChecklist');
       clearPlanEditorValidation('planAlumnosChecklist');
       clearPlanEditorValidation('planSubmateria');
+      clearPlanEditorValidation('planNivelOperativo');
       state.planEditor.selectedSubmateriaId = getDefaultPlanSubmateriaIdForMateria($('planMateria') ? $('planMateria').value : '');
       if (tallerId) {
         renderPlanGroupChecklist();
+        syncPlanNivelOperativoField();
         renderPlanAlumnosChecklist(new Set(Array.from(getPlanTallerAlumnoIdSet(tallerId))));
         return;
       }
       renderPlanGroupChecklist();
+      syncPlanNivelOperativoField();
       renderPlanAlumnosChecklist(new Set(getSelectedPlanAlumnos()));
     }
 
@@ -12188,6 +12297,7 @@
       $('planFecha').disabled = !canEditDate;
       $('planMateria').disabled = catalogsLoading;
       if ($('planSubmateria')) $('planSubmateria').disabled = catalogsLoading;
+      if ($('planNivelOperativo')) $('planNivelOperativo').disabled = catalogsLoading || isEdit;
       $('planFrase').disabled = catalogsLoading;
       $('selectAllVisibleAlumnosBtn').disabled = catalogsLoading;
       $('clearVisibleAlumnosBtn').disabled = catalogsLoading;
@@ -12198,6 +12308,7 @@
       syncPlanEditorActionAvailability(catalogsLoading);
       syncPlanSubmateriaSelect();
       renderPlanGroupChecklist();
+      syncPlanNivelOperativoField({ preserveValue: true });
       renderPlanAlumnosChecklist();
       renderPlanActivitiesEditor();
       renderPlanBuilderVisibility();
@@ -12314,9 +12425,11 @@
         input.checked = checked;
       });
       if (!checked) {
+        syncPlanNivelOperativoField();
         renderPlanAlumnosChecklist(new Set());
         return;
       }
+      syncPlanNivelOperativoField();
       const selected = new Set();
       getSelectedGroupIds().forEach((groupId) => applyGroupSelectionToAlumnoSet(selected, groupId, true));
       renderPlanAlumnosChecklist(selected);
@@ -13012,7 +13125,7 @@
         const displaySemana = semana || buildWeekRangeFromSemanaId(plan.semana_id);
         const groupLabel = entry.isMulti
           ? getPlaneacionEntryGroupLabels(entry).join(' \u00b7 ')
-          : (grupo ? getGrupoDisplayName(grupo) : plan.grupo_id);
+          : getPlanGroupDisplayLabel(plan);
         const materiaLabel = getPlanMateriaDisplayLabel(plan, materia);
         const weekLabel = getWeekLabelForPlan(plan, displaySemana);
         const weekPrimaryLabel = displaySemana && displaySemana.fecha_inicio
@@ -14286,6 +14399,10 @@
       const selectedTallerIdForSave = getPlanEditorUsesTallerSelector(materiaId)
         ? getSelectedPlanTallerId()
         : String((previousPlan && previousPlan.taller_id) || '').trim();
+      const nivelOperativo = shouldShowPlanNivelOperativoField() ? getPlanNivelOperativoValue() : '';
+      if (nivelOperativo && (selectedTallerIdForSave || grupoIds.length !== 1 || !isPoksGroup(grupoIds[0]))) {
+        throw createPlanEditorValidationError('El nivel Poks solo aplica a una planeacion individual de Poks.', 'planNivelOperativo');
+      }
       const planEditorSnapshot = capturePlanEditorSnapshot();
       const targetStatus = editorMode === 'edit'
         ? String((previousPlan && previousPlan.estado) || 'borrador').trim()
@@ -14298,6 +14415,7 @@
             materiaId,
             submateriaId: selectedSubmateriaId,
             tallerId: selectedTallerIdForSave,
+            nivelOperativo,
             fraseSemana,
             alumnosIds,
             activities: actividades,
@@ -14313,6 +14431,7 @@
               materia_id: materiaId,
               submateria_id: selectedSubmateriaId,
               taller_id: selectedTallerIdForSave,
+              nivel_operativo: nivelOperativo,
               alumnos_ids: alumnosIds,
               activities: actividades.map((activity) => ({
                 actividad_id: activity.actividad_id || '',
@@ -14331,6 +14450,7 @@
               materiaId,
               submateriaId: selectedSubmateriaId,
               tallerId: selectedTallerIdForSave,
+              nivelOperativo,
               alumnosIds,
               actividades
             },
@@ -14388,6 +14508,7 @@
               materia_id: materiaId,
               submateria_id: selectedSubmateriaId,
               taller_id: selectedTallerIdForSave,
+              nivel_operativo: nivelOperativo,
               frase_semana: fraseSemana,
               alumnos_ids: alumnosIds,
               actividades,
@@ -14414,6 +14535,7 @@
               materia_id: materiaId,
               submateria_id: selectedSubmateriaId,
               taller_id: selectedTallerIdForSave,
+              nivel_operativo: nivelOperativo,
               frase_semana: fraseSemana,
               alumnos_ids: alumnosIds,
               actividades,
@@ -14434,6 +14556,7 @@
             materia_id: materiaId,
             submateria_id: selectedSubmateriaId,
             taller_id: selectedTallerIdForSave,
+            nivel_operativo: nivelOperativo,
             frase_semana: fraseSemana,
             alumnos_ids: alumnosIds,
             actividades,
@@ -14450,6 +14573,7 @@
             materia_id: materiaId,
             submateria_id: selectedSubmateriaId,
             taller_id: selectedTallerIdForSave,
+            nivel_operativo: nivelOperativo,
             frase_semana: fraseSemana,
             alumnos_ids: alumnosIds,
             actividades,
@@ -16032,7 +16156,7 @@
     function shouldRefetchPlaneacionesAfterPlanSave(previousPlan, updatedPlan) {
       if (!previousPlan || !updatedPlan) return true;
       if (hasActivePlaneacionesFilters()) return true;
-      return ['semana_id', 'grupo_id', 'materia_id', 'submateria_id', 'taller_id', 'estado', 'facilitador_id'].some((field) => {
+      return ['semana_id', 'grupo_id', 'materia_id', 'submateria_id', 'taller_id', 'nivel_operativo', 'estado', 'facilitador_id'].some((field) => {
         return String(previousPlan[field] || '') !== String(updatedPlan[field] || '');
       });
     }
@@ -17207,6 +17331,7 @@
         $('planFecha').value,
         materiaId,
         getPlanEditorUsesTallerSelector(materiaId) ? getSelectedPlanTallerId() : getPlanEditorSelectedSubmateriaId(materiaId),
+        getPlanNivelOperativoValue(),
         getSelectedGroupIds().sort().join(','),
         getSelectedPlanAlumnos().sort().join(',')
       ]);
@@ -17271,7 +17396,7 @@
       $('reloadBtn').addEventListener('click', (event) => handleAction('refresh', refreshAll, { button: event.currentTarget }));
       $('savePlanBtn').addEventListener('click', (event) => handleAction('guardarPlaneacionCompleta', () => savePlanEditor(), {
         button: event.currentTarget,
-        key: buildActionKey('guardarPlaneacionCompleta', [state.planEditor.planId || $('planFecha').value, $('planMateria').value, getPlanEditorSelectedSubmateriaId($('planMateria').value), getSelectedGroupIds().sort().join(','), getSelectedPlanAlumnos().sort().join(',')])
+        key: buildActionKey('guardarPlaneacionCompleta', [state.planEditor.planId || $('planFecha').value, $('planMateria').value, getPlanEditorSelectedSubmateriaId($('planMateria').value), getPlanNivelOperativoValue(), getSelectedGroupIds().sort().join(','), getSelectedPlanAlumnos().sort().join(',')])
       }));
       if ($('savePlanDraftBtn')) $('savePlanDraftBtn').addEventListener('click', (event) => runCreatePlanAction(event.currentTarget, 'borrador'));
       if ($('savePlanActiveBtn')) $('savePlanActiveBtn').addEventListener('click', (event) => runCreatePlanAction(event.currentTarget, 'activa'));
@@ -17300,10 +17425,13 @@
       $('planMateria').addEventListener('change', () => {
         clearPlanEditorValidation('planMateria');
         clearPlanEditorValidation('planSubmateria');
+        clearPlanEditorValidation('planNivelOperativo');
         state.planEditor.selectedSubmateriaId = '';
         state.planEditor.selectedTallerId = '';
+        state.planEditor.nivelOperativo = '';
         syncPlanSubmateriaSelect('');
         renderPlanGroupChecklist();
+        syncPlanNivelOperativoField();
         renderPlanAlumnosChecklist(new Set(getSelectedPlanAlumnos()));
       });
       if ($('planSubmateria')) $('planSubmateria').addEventListener('change', (event) => {
@@ -17316,6 +17444,7 @@
         state.planEditor.selectedSubmateriaId = event.currentTarget.value || '';
       });
       $('planGruposChecklist').addEventListener('change', handlePlanGroupChecklistChange);
+      if ($('planNivelOperativo')) $('planNivelOperativo').addEventListener('change', handlePlanNivelOperativoChanged);
       $('planAlumnosChecklist').addEventListener('change', () => clearPlanEditorValidation('planAlumnosChecklist'));
       $('obsPlan').addEventListener('change', renderObsAlumnoSelect);
       $('evaMateria').addEventListener('change', renderEvaluationDependencies);
