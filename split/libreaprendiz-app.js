@@ -12101,6 +12101,14 @@
       return nextSelected;
     }
 
+    function buildDefaultSelectedPlanAlumnosForCurrentGroups() {
+      const selected = new Set();
+      getSelectedGroupIds().forEach((groupId) => {
+        applyGroupSelectionToAlumnoSet(selected, groupId, true);
+      });
+      return selected;
+    }
+
     function renderPlanAlumnosChecklist(selectedOverride) {
       const host = $('planAlumnosChecklist');
       const catalogsLoading = !!(state.ui && state.ui.planeacionesCatalogosLoading) && currentViewNeedsCatalogos();
@@ -12234,7 +12242,7 @@
       state.planEditor.nivelOperativo = normalizePlanNivelOperativo(select ? select.value : '');
       clearPlanEditorValidation('planNivelOperativo');
       clearPlanEditorValidation('planAlumnosChecklist');
-      renderPlanAlumnosChecklist(new Set());
+      renderPlanAlumnosChecklist(buildDefaultSelectedPlanAlumnosForCurrentGroups());
     }
 
     function getOpenPlanInlineFieldId(plan, fieldName) {
