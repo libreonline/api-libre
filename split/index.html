@@ -2671,6 +2671,158 @@
       font-weight: 800 !important;
       white-space: nowrap;
     }
+    .facilitador-suplencias-scroll {
+      overflow: visible;
+      padding-bottom: 0;
+    }
+    .facilitador-suplencias-matrix {
+      min-width: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      display: grid;
+      gap: 7px;
+      overflow: visible;
+    }
+    .facilitador-suplencias-header {
+      display: none !important;
+    }
+    .facilitador-suplencias-row {
+      display: flex !important;
+      grid-template-columns: none !important;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      min-height: 50px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      background: rgba(19, 25, 34, 0.76);
+      padding: 8px;
+    }
+    .facilitador-suplencias-row:last-child {
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .facilitador-suplencias-row .facilitador-suplencias-assignment {
+      flex: 1 1 210px;
+      min-height: 0;
+      padding: 0 8px 0 0;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      gap: 8px;
+    }
+    .facilitador-suplencias-row .facilitador-suplencias-assignment::before {
+      content: "";
+      width: 6px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--la-cyan);
+      box-shadow: 0 0 14px rgba(31,182,229,0.34);
+      flex: 0 0 auto;
+    }
+    .facilitador-suplencias-cell {
+      flex: 0 1 auto;
+      min-height: 0;
+      padding: 0;
+      border: 0;
+    }
+    .facilitador-suplencias-cell:has(.facilitador-matrix-state.is-missing[title="Fuera de rango"]) {
+      display: none;
+    }
+    .facilitador-suplencias-week-chip {
+      min-width: 118px;
+      min-height: 36px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.035);
+      color: var(--text-strong);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 8px;
+      font: inherit;
+      text-align: center;
+    }
+    .facilitador-suplencias-week-chip.is-clickable {
+      cursor: pointer;
+    }
+    .facilitador-suplencias-week-chip.is-clickable:hover {
+      border-color: rgba(31,182,229,0.3);
+      background: rgba(31,182,229,0.08);
+    }
+    .facilitador-suplencias-week-label {
+      color: #a9c7e6;
+      font-size: 0.66rem;
+      font-weight: 800;
+      line-height: 1.1;
+      max-width: 86px;
+      white-space: normal;
+    }
+    .facilitador-suplencias-mini-badge {
+      min-height: 21px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,209,102,0.14);
+      color: #ffe6a8;
+      font-size: 0.62rem;
+      font-weight: 900;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .plan-badges,
+    .plan-compact-status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      align-items: center;
+    }
+    .badge.badge-suplencia {
+      background: rgba(31,182,229,0.14);
+      border-color: rgba(31,182,229,0.28);
+      color: #9fe8f1;
+    }
+    .badge.badge-suplencia.is-coverage {
+      background: rgba(31,182,229,0.10);
+      color: #b8edf6;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    @media (max-width: 700px) {
+      .facilitador-suplencias-row {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 7px;
+        padding: 8px;
+      }
+      .facilitador-suplencias-row .facilitador-suplencias-assignment {
+        border-right: 0;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        padding: 0 0 7px 0;
+        width: 100%;
+      }
+      .facilitador-suplencias-cell {
+        width: 100%;
+      }
+      .facilitador-suplencias-week-chip {
+        width: 100%;
+        justify-content: space-between;
+        min-width: 0;
+      }
+      .facilitador-suplencias-week-label {
+        max-width: none;
+        text-align: left;
+      }
+      .facilitador-suplencias-cover-btn {
+        width: auto !important;
+        min-width: 82px !important;
+      }
+      .plan-card.is-collapsed .actions {
+        gap: 8px;
+      }
+      .plan-card.is-collapsed .plan-badges {
+        justify-content: flex-start;
+      }
+    }
     .admin-materias-kpis {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
@@ -6197,7 +6349,7 @@
     </div>
   </div>
 
-<script defer src="./libreaprendiz-app.js?v=20260503-suplencia-materia-option-v1"></script>
+<script defer src="./libreaprendiz-app.js?v=20260503-suplencias-compact-bugs-v1"></script>
 </body>
 </html>
 

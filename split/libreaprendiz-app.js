@@ -3091,6 +3091,9 @@
       const suplenciasHtml = renderFacilitadorSuplenciasActivasSection(state.session.usuario.facilitador_id || state.session.usuario.id || '');
       suplenciasHost.innerHTML = suplenciasHtml || '';
       suplenciasHost.hidden = !suplenciasHtml;
+      if (isPlaneacionesSurfaceVisible() && Array.isArray(state.planeaciones) && state.planeaciones.length) {
+        scheduleAfterPaint(() => renderPlaneacionesList(), 0);
+      }
     }
 
     function renderPlaneacionesSurface(options = {}) {
@@ -6009,6 +6012,15 @@
         : asignacion._pulse_plan_facilitador_id;
       return 'Suplencia: ' + baseLabel + ' (titular: ' + titularNombre + ')';
     }
+
+    function isSemanaInSuplenciaRangeFrontend(semana, suplencia) {
+      const sInicio = toYmdFrontend_(semana && semana.fecha_inicio || '');
+      const sFin = toYmdFrontend_(semana && semana.fecha_fin || '');
+      const supInicio = String(suplencia && suplencia.fecha_inicio || '').trim();
+      const supFin = String(suplencia && suplencia.fecha_fin || '').trim();
+      if (!sInicio || !sFin || !supInicio || !supFin) return false;
+      return supInicio <= sFin && supFin >= sInicio;
+    }
     // ─────────────────────────────────────────────────────
 
     function getFacilitadorSearchText(row) {
@@ -6906,7 +6918,7 @@
         const titularFac = getFacilitadorById(sup.facilitador_titular_id);
         const titularNombre = titularFac
           ? (titularFac.nombre_mostrado || titularFac.nombre_completo || sup.facilitador_titular_id)
-          : sup.facilitador_titular_id;
+          : 'titular';
         let assignLabel = getSuplenciaLabel(sup);
         assignLabel = assignLabel.replace(/\bMAT-MIG-([A-Z0-9_-]+)/gi, function(_, value) {
           return String(value || '').replace(/[-_]+/g, ' ');
@@ -6914,7 +6926,7 @@
         const rowLabel = [
           '<div class="facilitador-suplencias-label">',
             '<strong>' + escapeHtml(assignLabel) + '</strong>',
-            '<span class="mini">Titular: ' + escapeHtml(titularNombre) + '</span>',
+            '<span class="mini">Titular: ' + escapeHtml(titularNombre) + ' · ' + escapeHtml(formatSuplenciaDateRange(sup)) + '</span>',
           '</div>'
         ].join('');
 
@@ -6941,11 +6953,11 @@
               : estado === 'cierre_pendiente' ? 'Cierre'
               : estado === 'archivada' ? 'Archivada'
               : 'Borrador';
-            const suplenciaBadge = plan.creada_por_suplencia === 'si' || plan.facilitador_suplente_id
-              ? ' <span class="plan-badge-suplencia">Suplencia</span>' : '';
-            return '<div class="facilitador-suplencias-cell"><span class="facilitador-matrix-state ' + stateClass + '" onclick="openPlanLocalInstant(\'' + escapeJsAttrValue(plan.planeacion_id) + '\')" title="' + semanaLabel + '">' + escapeHtml(stateLabel) + suplenciaBadge + '</span></div>';
+            const suplenciaBadge = isPlanCreatedBySuplencia(plan)
+              ? '<span class="facilitador-suplencias-mini-badge">Suplencia</span>' : '';
+            return '<div class="facilitador-suplencias-cell"><button class="facilitador-suplencias-week-chip is-clickable" type="button" onclick="openPlanLocalInstant(\'' + escapeJsAttrValue(plan.planeacion_id) + '\')" title="' + semanaLabel + '"><span class="facilitador-suplencias-week-label">' + semanaLabel + '</span><span class="facilitador-matrix-state ' + stateClass + '">' + escapeHtml(stateLabel) + '</span>' + suplenciaBadge + '</button></div>';
           }
-          return '<div class="facilitador-suplencias-cell"><button class="btn-ghost facilitador-suplencias-cover-btn" type="button" onclick="cubrirSuplencia(this, \'' + escapeJsAttrValue(sup.suplencia_id) + '\', \'' + escapeJsAttrValue(semana.semana_id) + '\')">Cubrir</button></div>';
+          return '<div class="facilitador-suplencias-cell"><div class="facilitador-suplencias-week-chip"><span class="facilitador-suplencias-week-label">' + semanaLabel + '</span><button class="btn-ghost facilitador-suplencias-cover-btn" type="button" onclick="cubrirSuplencia(this, \'' + escapeJsAttrValue(sup.suplencia_id) + '\', \'' + escapeJsAttrValue(semana.semana_id) + '\')">Cubrir</button></div></div>';
         }).join('');
 
         return '<div class="facilitador-suplencias-row" style="grid-template-columns:' + escapeHtml(buildSuplenciasMatrixColumns(semanaHeaders.length)) + '">' +
@@ -6975,6 +6987,13 @@
     function buildSuplenciasMatrixColumns(weekCount) {
       const safeCount = Math.max(1, Math.min(8, Number(weekCount) || 1));
       return 'minmax(168px, 1.15fr) repeat(' + safeCount + ', minmax(82px, 0.85fr))';
+    }
+
+    function formatSuplenciaDateRange(suplencia) {
+      const start = toYmdFrontend_(suplencia && suplencia.fecha_inicio || '');
+      const end = toYmdFrontend_(suplencia && suplencia.fecha_fin || '');
+      if (start && end) return formatFechaCorta(start) + ' - ' + formatFechaCorta(end);
+      return start || end || 'Sin rango';
     }
 
     async function cubrirSuplencia(button, suplenciaId, semanaId) {
@@ -9452,6 +9471,45 @@
         className: baseClass,
         label: getPlanStatusLabel(plan && plan.estado)
       };
+    }
+
+    function isPlanCreatedBySuplencia(plan) {
+      return String(plan && plan.creada_por_suplencia || '').trim().toLowerCase() === 'si' ||
+        !!String(plan && plan.facilitador_suplente_id || '').trim();
+    }
+
+    function getCurrentFacilitadorSuplenciaForPlan(plan) {
+      if (!plan || !state.session || !state.session.usuario || canUseAdminShell()) return null;
+      const sessionFacId = String(state.session.usuario.facilitador_id || state.session.usuario.id || '').trim();
+      if (!sessionFacId) return null;
+      return (Array.isArray(state.catalogos.suplencias) ? state.catalogos.suplencias : []).find((sup) => {
+        if (!sup || !sup.activa || String(sup.archivada_at || '').trim()) return false;
+        if (String(sup.facilitador_suplente_id || '').trim() !== sessionFacId) return false;
+        if (String(sup.facilitador_titular_id || '').trim() !== String(plan.facilitador_id || '').trim()) return false;
+        const semana = (state.catalogos.semanas || []).find((row) => String(row.semana_id || '').trim() === String(plan.semana_id || '').trim());
+        if (semana && !isSemanaInSuplenciaRangeFrontend(semana, sup)) return false;
+        if (String(sup.taller_id || '').trim()) {
+          return String(plan.taller_id || '').trim() === String(sup.taller_id || '').trim();
+        }
+        return String(plan.grupo_id || '').trim() === String(sup.grupo_id || '').trim() &&
+          String(plan.materia_id || '').trim() === String(sup.materia_id || '').trim();
+      }) || null;
+    }
+
+    function getPlanSuplenciaBadgeHtml(plan, hasAdminPower) {
+      if (isPlanCreatedBySuplencia(plan)) {
+        if (hasAdminPower && plan.facilitador_suplente_id) {
+          const suplente = (state.catalogos.facilitadores || []).find((f) => f.facilitador_id === plan.facilitador_suplente_id);
+          const supNombre = suplente ? (suplente.nombre || suplente.facilitador_id) : plan.facilitador_suplente_id;
+          return '<span class="badge badge-suplencia">Suplencia por ' + escapeHtml(supNombre) + '</span>';
+        }
+        return '<span class="badge badge-suplencia">Suplencia</span>';
+      }
+      const suplencia = getCurrentFacilitadorSuplenciaForPlan(plan);
+      if (!suplencia) return '';
+      const titular = getFacilitadorById(suplencia.facilitador_titular_id);
+      const titularNombre = titular ? (titular.nombre_mostrado || titular.nombre_completo || suplencia.facilitador_titular_id) : '';
+      return '<span class="badge badge-suplencia is-coverage">' + (titularNombre ? 'Cubriendo a ' + escapeHtml(titularNombre) : 'Cubriendo titular') + '</span>';
     }
 
     function getPlanLocalFeedbackMarkup(plan) {
@@ -12648,17 +12706,7 @@
         const localFeedbackHtml = getPlanLocalFeedbackMarkup(plan);
         const badgeMeta = getPlanStatusBadgeMeta(plan);
         const badgeHtml = '<span class="badge ' + escapeHtml(badgeMeta.className) + '">' + escapeHtml(badgeMeta.label) + '</span>';
-        const isSuplenciaPlan = String(plan.creada_por_suplencia || '').toLowerCase() === 'si' || !!plan.facilitador_suplente_id;
-        const suplenciaBadgeHtml = isSuplenciaPlan
-          ? (function() {
-              if (hasAdminPower && plan.facilitador_suplente_id) {
-                const suplente = (state.catalogos.facilitadores || []).find((f) => f.facilitador_id === plan.facilitador_suplente_id);
-                const supNombre = suplente ? (suplente.nombre || suplente.facilitador_id) : plan.facilitador_suplente_id;
-                return '<span class="badge badge-suplencia">Suplencia por ' + escapeHtml(supNombre) + '</span>';
-              }
-              return '<span class="badge badge-suplencia">Suplencia</span>';
-            })()
-          : '';
+        const suplenciaBadgeHtml = getPlanSuplenciaBadgeHtml(plan, hasAdminPower);
         const summaryMetaHtml = ((hasMaterialAlert || latestResolvedMaterialAlert)
           ? (
               '<div class="plan-compact-summary-meta">' +
