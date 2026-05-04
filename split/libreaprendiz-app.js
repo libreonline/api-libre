@@ -4465,6 +4465,26 @@
       return nivel ? (base + ' · ' + nivel) : base;
     }
 
+    function getAlumnoEditorNivelOperativo() {
+      const editor = state.alumnosUi && state.alumnosUi.editor ? state.alumnosUi.editor : {};
+      return isPoksGroup(editor.grupo_id) ? String(editor.nivel_id || '').trim() : '';
+    }
+
+    function syncAlumnoNivelOperativoField() {
+      const editor = state.alumnosUi && state.alumnosUi.editor ? state.alumnosUi.editor : null;
+      const field = $('adminAlumnoNivelOperativoField');
+      const input = $('adminAlumnoNivelOperativo');
+      const show = !!(editor && isPoksGroup(editor.grupo_id));
+      if (field) field.hidden = !show;
+      if (!input) return;
+      if (!show) {
+        if (editor) editor.nivel_id = '';
+        input.value = '';
+        return;
+      }
+      input.value = String(editor.nivel_id || '').trim();
+    }
+
     function getAlumnoStatusVisual(row) {
       const status = String(row && row.estatus || '').trim().toLowerCase();
       if (row && row.__archived) return 'archivado';
@@ -4819,13 +4839,14 @@
       if (!state.alumnosUi || !state.alumnosUi.editorOpen) return false;
       const editor = state.alumnosUi.editor || createEmptyAlumnoEditorState();
       if (state.alumnosUi.editorMode !== 'edit') {
+        const newNivel = getAlumnoEditorNivelOperativo();
         return !![
           editor.matricula,
           editor.nombres,
           editor.alias,
           editor.apellidos,
           editor.grupo_id,
-          editor.nivel_id,
+          newNivel,
           editor.notas_internas
         ].some((value) => String(value || '').trim()) || String(editor.estatus || 'activo').trim() !== 'activo';
       }
@@ -4834,11 +4855,13 @@
       const split = splitAlumnoNombreCompleto(alumno.nombre_completo || '');
       const fullName = composeAlumnoNombreCompleto(editor.nombres, editor.apellidos);
       const nextAlias = composeAlumnoNombreMostrado(editor.nombres, editor.alias, fullName);
+      const previousNivel = isPoksGroup(alumno.grupo_id) ? String(alumno.nivel_id || '').trim() : '';
+      const nextNivel = getAlumnoEditorNivelOperativo();
       return String(editor.matricula || '').trim() !== String(alumno.matricula || '').trim() ||
         fullName !== String(alumno.nombre_completo || '').trim() ||
         nextAlias !== String(alumno.nombre_mostrado || alumno.nombre_completo || '').trim() ||
         String(editor.grupo_id || '').trim() !== String(alumno.grupo_id || '').trim() ||
-        String(editor.nivel_id || '').trim() !== String(alumno.nivel_id || '').trim() ||
+        nextNivel !== previousNivel ||
         String(editor.estatus || 'activo').trim() !== String(alumno.estatus || 'activo').trim() ||
         String(editor.notas_internas || '').trim() !== String(getAlumnoAdminNotes(alumno.alumno_id, alumno.notas_internas || '') || '').trim() ||
         String(editor.nombres || '').trim() !== String(split.nombres || alumno.nombre_mostrado || '').trim() ||
@@ -5025,7 +5048,7 @@
           nombre_completo: fullName,
           nombre_mostrado: composeAlumnoNombreMostrado(editor.nombres, editor.alias, fullName),
           grupo_id: String(editor.grupo_id || '').trim(),
-          nivel_id: String(editor.nivel_id || '').trim(),
+          nivel_id: getAlumnoEditorNivelOperativo(),
           estatus: String(editor.estatus || 'activo').trim(),
           notas_internas: String(editor.notas_internas || '').trim()
         };
@@ -5627,9 +5650,9 @@
       if ($('adminAlumnoApellidos')) $('adminAlumnoApellidos').value = state.alumnosUi.editor.apellidos || '';
       if ($('adminAlumnoStatus')) $('adminAlumnoStatus').value = state.alumnosUi.editor.estatus || 'activo';
       if ($('adminAlumnoNotas')) $('adminAlumnoNotas').value = state.alumnosUi.editor.notas_internas || '';
-      if ($('adminAlumnoNivelOperativo')) $('adminAlumnoNivelOperativo').value = state.alumnosUi.editor.nivel_id || '';
       fillSelect($('adminAlumnoGrupo'), state.catalogos.grupos || [], (row) => row.grupo_id, (row) => getGrupoDisplayName(row), 'Selecciona grupo');
       if ($('adminAlumnoGrupo')) $('adminAlumnoGrupo').value = state.alumnosUi.editor.grupo_id || '';
+      syncAlumnoNivelOperativoField();
       if ($('adminAlumnoIdentity')) {
         $('adminAlumnoIdentity').hidden = !selectedAlumno;
         $('adminAlumnoIdentity').innerHTML = selectedAlumno
@@ -5818,7 +5841,7 @@
                     '<span>Grupo actual</span>',
                     '<select id="adminAlumnoGrupo"></select>',
                   '</label>',
-                  '<label class="field">',
+                  '<label id="adminAlumnoNivelOperativoField" class="field" hidden>',
                     '<span>Nivel Poks</span>',
                     '<input id="adminAlumnoNivelOperativo" type="text" maxlength="50" list="adminAlumnoNivelOperativoOptions" placeholder="Opcional">',
                     '<datalist id="adminAlumnoNivelOperativoOptions">',
@@ -6119,7 +6142,10 @@
         state.alumnosUi.editor.aliasTouched = String(event.currentTarget.value || '').trim().length > 0;
       });
       if ($('adminAlumnoApellidos')) $('adminAlumnoApellidos').addEventListener('input', (event) => { state.alumnosUi.editor.apellidos = event.currentTarget.value; });
-      if ($('adminAlumnoGrupo')) $('adminAlumnoGrupo').addEventListener('change', (event) => { state.alumnosUi.editor.grupo_id = event.currentTarget.value; });
+      if ($('adminAlumnoGrupo')) $('adminAlumnoGrupo').addEventListener('change', (event) => {
+        state.alumnosUi.editor.grupo_id = event.currentTarget.value;
+        syncAlumnoNivelOperativoField();
+      });
       if ($('adminAlumnoNivelOperativo')) $('adminAlumnoNivelOperativo').addEventListener('input', (event) => { state.alumnosUi.editor.nivel_id = event.currentTarget.value; });
       if ($('adminAlumnoStatus')) $('adminAlumnoStatus').addEventListener('change', (event) => { state.alumnosUi.editor.estatus = event.currentTarget.value; });
       if ($('adminAlumnoNotas')) $('adminAlumnoNotas').addEventListener('input', (event) => { state.alumnosUi.editor.notas_internas = event.currentTarget.value; });
