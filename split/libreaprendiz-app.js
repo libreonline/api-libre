@@ -53,6 +53,28 @@
       };
     }
 
+    function createEmptyAlumnoFichaMedicaState() {
+      return {
+        alumno_id: '',
+        contacto_emergencia_nombre: '',
+        contacto_emergencia_telefono: '',
+        contacto_emergencia_2_nombre: '',
+        contacto_emergencia_2_telefono: '',
+        tipo_sangre: '',
+        alergias: '',
+        condiciones_medicas: '',
+        medicamentos: '',
+        restricciones_actividad: '',
+        notas_cuidado: '',
+        seguro_compania: '',
+        seguro_poliza: '',
+        seguro_telefono: '',
+        seguro_notas: '',
+        sabe_nadar: '',
+        fecha_actualizacion: ''
+      };
+    }
+
     function createEmptyAlumnosUiState() {
       return {
         search: '',
@@ -63,6 +85,7 @@
         editorMode: 'new',
         selectedAlumnoId: '',
         editor: createEmptyAlumnoEditorState(),
+        fichaMedicaOpen: false,
         cambioGrupoOpen: false,
         cambioGrupo: createEmptyAlumnoCambioState(),
         historialOpen: false,
@@ -73,6 +96,10 @@
         remoteHistoryFailedByAlumno: {},
         historyByAlumno: {},
         notesByAlumno: {},
+        fichaMedicaByAlumno: {},
+        fichaMedicaLoadedByAlumno: {},
+        fichaMedicaLoadingByAlumno: {},
+        fichaMedicaFailedByAlumno: {},
         deleteControl: createEmptyAlumnoDeleteState(),
         mockRows: []
       };
@@ -4766,6 +4793,7 @@
       state.alumnosUi.editorMode = 'new';
       state.alumnosUi.selectedAlumnoId = '';
       state.alumnosUi.editor = createEmptyAlumnoEditorState();
+      state.alumnosUi.fichaMedicaOpen = false;
     }
 
     function closeCambioGrupo() {
@@ -4842,6 +4870,68 @@
       delete state.alumnosUi.remoteHistoryFailedByAlumno[id];
     }
 
+    const ALUMNO_FICHA_MEDICA_FIELDS = [
+      'contacto_emergencia_nombre',
+      'contacto_emergencia_telefono',
+      'contacto_emergencia_2_nombre',
+      'contacto_emergencia_2_telefono',
+      'tipo_sangre',
+      'alergias',
+      'condiciones_medicas',
+      'medicamentos',
+      'restricciones_actividad',
+      'notas_cuidado',
+      'seguro_compania',
+      'seguro_poliza',
+      'seguro_telefono',
+      'seguro_notas',
+      'sabe_nadar'
+    ];
+
+    function normalizeAlumnoFichaMedica(row = {}, alumnoId = '') {
+      const ficha = createEmptyAlumnoFichaMedicaState();
+      ficha.alumno_id = String(alumnoId || row.alumno_id || '').trim();
+      ALUMNO_FICHA_MEDICA_FIELDS.forEach((field) => {
+        ficha[field] = String(row[field] || '').trim();
+      });
+      ficha.fecha_actualizacion = String(row.fecha_actualizacion || '').trim();
+      return ficha;
+    }
+
+    function getAlumnoFichaMedicaState(alumnoId) {
+      const id = String(alumnoId || '').trim();
+      if (!state.alumnosUi.fichaMedicaByAlumno[id]) {
+        state.alumnosUi.fichaMedicaByAlumno[id] = normalizeAlumnoFichaMedica({}, id);
+      }
+      return state.alumnosUi.fichaMedicaByAlumno[id];
+    }
+
+    async function loadAlumnoFichaMedica(alumnoId, options = {}) {
+      const id = String(alumnoId || '').trim();
+      if (!id || !canUseAdminShell()) return null;
+      if (state.alumnosUi.fichaMedicaLoadedByAlumno[id] && !options.force) {
+        return getAlumnoFichaMedicaState(id);
+      }
+      if (state.alumnosUi.fichaMedicaLoadingByAlumno[id]) return getAlumnoFichaMedicaState(id);
+      state.alumnosUi.fichaMedicaLoadingByAlumno[id] = true;
+      state.alumnosUi.fichaMedicaFailedByAlumno[id] = false;
+      try {
+        const response = await api('getAlumnoFichaMedica', { alumno_id: id });
+        state.alumnosUi.fichaMedicaByAlumno[id] = normalizeAlumnoFichaMedica(response && response.ficha, id);
+        state.alumnosUi.fichaMedicaLoadedByAlumno[id] = true;
+        return state.alumnosUi.fichaMedicaByAlumno[id];
+      } catch (error) {
+        state.alumnosUi.fichaMedicaFailedByAlumno[id] = true;
+        console.warn('No se pudo cargar ficha medica de alumno:', error);
+        return getAlumnoFichaMedicaState(id);
+      } finally {
+        state.alumnosUi.fichaMedicaLoadingByAlumno[id] = false;
+        if (state.alumnosUi.editorOpen && state.alumnosUi.selectedAlumnoId === id) {
+          renderAdminAlumnosModule();
+        }
+      }
+    }
+
     async function loadAlumnoHistorialRemoto(alumnoId) {
       const id = String(alumnoId || '').trim();
       if (!id || !canUseAdminShell()) return;
@@ -4893,6 +4983,7 @@
       } : createEmptyAlumnoEditorState();
       if (!alumno) syncAlumnoAliasSuggestion({ force: true });
       state.alumnosUi.editorOpen = true;
+      state.alumnosUi.fichaMedicaOpen = false;
       closeCambioGrupo();
       closeAlumnoHistorial();
       renderAdminAlumnosModule();
@@ -5179,6 +5270,7 @@
         ALERTAS: 'Alertas',
         EVALUACIONES: 'Evaluaciones',
         ALUMNO_TALLER: 'Talleres',
+        ALUMNO_FICHA_MEDICA: 'Ficha médica',
         ALUMNO_REFUERZO: 'Refuerzos',
         NOTAS_DIRECTORA: 'Notas dirección',
         REPORTES_CACHE: 'Reportes'
@@ -5206,6 +5298,12 @@
       if (ids.has(String(state.alumnosUi.selectedAlumnoId || '').trim())) closeAlumnoEditor();
       if (ids.has(String(state.alumnosUi.historialAlumnoId || '').trim())) closeAlumnoHistorial();
       if (ids.has(String(state.alumnosUi.cambioGrupo && state.alumnosUi.cambioGrupo.alumno_id || '').trim())) closeCambioGrupo();
+      ids.forEach((id) => {
+        delete state.alumnosUi.fichaMedicaByAlumno[id];
+        delete state.alumnosUi.fichaMedicaLoadedByAlumno[id];
+        delete state.alumnosUi.fichaMedicaLoadingByAlumno[id];
+        delete state.alumnosUi.fichaMedicaFailedByAlumno[id];
+      });
       bumpAlumnosSourceRevision();
     }
 
@@ -5359,6 +5457,148 @@
       return buttons.join('');
     }
 
+    function getAlumnoFichaInputMap() {
+      return {
+        contacto_emergencia_nombre: 'adminAlumnoMedContactoNombre',
+        contacto_emergencia_telefono: 'adminAlumnoMedContactoTelefono',
+        contacto_emergencia_2_nombre: 'adminAlumnoMedContacto2Nombre',
+        contacto_emergencia_2_telefono: 'adminAlumnoMedContacto2Telefono',
+        tipo_sangre: 'adminAlumnoMedTipoSangre',
+        alergias: 'adminAlumnoMedAlergias',
+        condiciones_medicas: 'adminAlumnoMedCondiciones',
+        medicamentos: 'adminAlumnoMedMedicamentos',
+        restricciones_actividad: 'adminAlumnoMedRestricciones',
+        notas_cuidado: 'adminAlumnoMedNotas',
+        seguro_compania: 'adminAlumnoMedSeguroCompania',
+        seguro_poliza: 'adminAlumnoMedSeguroPoliza',
+        seguro_telefono: 'adminAlumnoMedSeguroTelefono',
+        seguro_notas: 'adminAlumnoMedSeguroNotas',
+        sabe_nadar: 'adminAlumnoMedSabeNadar'
+      };
+    }
+
+    function syncAlumnoFichaMedicaInputs(alumnoId) {
+      const ficha = getAlumnoFichaMedicaState(alumnoId);
+      const map = getAlumnoFichaInputMap();
+      Object.keys(map).forEach((field) => {
+        const el = $(map[field]);
+        if (el) el.value = ficha[field] || '';
+      });
+      const status = $('adminAlumnoMedStatus');
+      if (status) {
+        const id = String(alumnoId || '').trim();
+        if (state.alumnosUi.fichaMedicaLoadingByAlumno[id]) {
+          status.textContent = 'Cargando ficha médica...';
+        } else if (state.alumnosUi.fichaMedicaFailedByAlumno[id]) {
+          status.textContent = 'No se pudo cargar. Puedes intentar guardar para sincronizar.';
+        } else if (ficha.fecha_actualizacion) {
+          status.textContent = 'Actualizada ' + formatFechaHumana(toYmdFrontend_(ficha.fecha_actualizacion));
+        } else {
+          status.textContent = 'Sin ficha médica guardada.';
+        }
+      }
+    }
+
+    function updateAlumnoFichaMedicaDraft(field, value) {
+      const alumnoId = String(state.alumnosUi.selectedAlumnoId || '').trim();
+      if (!alumnoId || ALUMNO_FICHA_MEDICA_FIELDS.indexOf(field) < 0) return;
+      const ficha = getAlumnoFichaMedicaState(alumnoId);
+      ficha[field] = String(value || '');
+    }
+
+    function toggleAlumnoFichaMedica(open) {
+      const alumnoId = String(state.alumnosUi.selectedAlumnoId || '').trim();
+      const next = open === undefined ? !state.alumnosUi.fichaMedicaOpen : !!open;
+      const scrollFichaPanelIntoView = () => {
+        const panel = $('adminAlumnoFichaMedicaPanel');
+        if (panel && !panel.hidden && panel.scrollIntoView) {
+          panel.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+        }
+      };
+      state.alumnosUi.fichaMedicaOpen = next;
+      renderAdminAlumnosModule();
+      if (next) {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(scrollFichaPanelIntoView);
+        });
+        window.setTimeout(scrollFichaPanelIntoView, 180);
+      }
+      if (next && alumnoId) loadAlumnoFichaMedica(alumnoId).catch(() => {});
+    }
+
+    async function saveAlumnoFichaMedica(button) {
+      ensureLoggedIn();
+      const alumnoId = String(state.alumnosUi.selectedAlumnoId || '').trim();
+      if (!alumnoId) throw new Error('Selecciona un alumno para guardar la ficha médica.');
+      const ficha = getAlumnoFichaMedicaState(alumnoId);
+      await handleAction('guardarAlumnoFichaMedica', async () => {
+        const payload = { alumno_id: alumnoId };
+        ALUMNO_FICHA_MEDICA_FIELDS.forEach((field) => {
+          payload[field] = String(ficha[field] || '').trim();
+        });
+        const response = await api('guardarAlumnoFichaMedica', payload);
+        state.alumnosUi.fichaMedicaByAlumno[alumnoId] = normalizeAlumnoFichaMedica(response && response.ficha, alumnoId);
+        state.alumnosUi.fichaMedicaLoadedByAlumno[alumnoId] = true;
+        state.alumnosUi.fichaMedicaFailedByAlumno[alumnoId] = false;
+        renderAdminAlumnosModule();
+        setBanner('Ficha médica guardada.', 'success');
+      }, {
+        button,
+        key: buildActionKey('guardarAlumnoFichaMedica', [alumnoId]),
+        busyText: 'Guardando'
+      });
+    }
+
+    function buildAlumnoFichaMedicaPrintHtml(alumno, ficha) {
+      const fieldRows = [
+        ['Contacto de emergencia', ficha.contacto_emergencia_nombre],
+        ['Teléfono de emergencia', ficha.contacto_emergencia_telefono],
+        ['Contacto de emergencia 2', ficha.contacto_emergencia_2_nombre],
+        ['Teléfono de emergencia 2', ficha.contacto_emergencia_2_telefono],
+        ['Tipo de sangre', ficha.tipo_sangre],
+        ['Alergias', ficha.alergias],
+        ['Condiciones médicas', ficha.condiciones_medicas],
+        ['Medicamentos', ficha.medicamentos],
+        ['Restricciones de actividad', ficha.restricciones_actividad],
+        ['Sabe nadar', ficha.sabe_nadar ? getSabeNadarLabel(ficha.sabe_nadar) : 'Sin dato'],
+        ['Seguro - compañía', ficha.seguro_compania],
+        ['Seguro - póliza', ficha.seguro_poliza],
+        ['Seguro - teléfono', ficha.seguro_telefono],
+        ['Seguro - notas', ficha.seguro_notas],
+        ['Notas de cuidado', ficha.notas_cuidado]
+      ];
+      return '<!doctype html><html><head><meta charset="utf-8"><title>Ficha médica - ' + escapeHtml(getAlumnoNameLabel(alumno)) + '</title>' +
+        '<style>body{font-family:Arial,sans-serif;color:#172033;margin:28px;}h1{font-size:22px;color:#087686;margin:0 0 4px;}h2{font-size:13px;margin:0 0 18px;color:#5B6575;}table{width:100%;border-collapse:collapse;font-size:12px;}th{background:#142135;color:#CBEFFF;text-align:left;padding:8px;}td{border:1px solid #D8E2EC;padding:8px;vertical-align:top;}td:first-child{width:190px;font-weight:700;background:#F8FBFD;}footer{margin-top:18px;font-size:11px;color:#5B6575;}@media print{button{display:none;}body{margin:18px;}}</style>' +
+        '</head><body><button onclick="window.print()">Imprimir</button>' +
+        '<h1>' + escapeHtml(getAlumnoNameLabel(alumno)) + '</h1>' +
+        '<h2>Matrícula ' + escapeHtml(getAlumnoSecondaryLabel(alumno) || '-') + ' · Grupo ' + escapeHtml(getGrupoNombre(alumno.grupo_id) || '-') + '</h2>' +
+        '<table><thead><tr><th>Campo</th><th>Dato</th></tr></thead><tbody>' +
+        fieldRows.map((row) => '<tr><td>' + escapeHtml(row[0]) + '</td><td>' + escapeHtml(String(row[1] || 'Sin dato')).replace(/\n/g, '<br>') + '</td></tr>').join('') +
+        '</tbody></table><footer>Ficha médica administrativa. Última actualización: ' + escapeHtml(ficha.fecha_actualizacion ? formatFechaHumana(toYmdFrontend_(ficha.fecha_actualizacion)) : 'sin registro') + '.</footer>' +
+        '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},120);});<\/script></body></html>';
+    }
+
+    function getSabeNadarLabel(value) {
+      const normalized = String(value || '').trim();
+      if (normalized === 'si') return 'Sí';
+      if (normalized === 'no') return 'No';
+      if (normalized === 'no_seguro') return 'No confirmado';
+      return normalized || 'Sin dato';
+    }
+
+    async function printAlumnoFichaMedica(button) {
+      const alumnoId = String(state.alumnosUi.selectedAlumnoId || '').trim();
+      const alumno = getAlumnoById(alumnoId);
+      if (!alumno) throw new Error('Selecciona un alumno para imprimir la ficha médica.');
+      const printWindow = window.open('', '_blank', 'width=860,height=720');
+      if (!printWindow) throw new Error('El navegador bloqueó la ventana de impresión.');
+      await loadAlumnoFichaMedica(alumnoId);
+      const ficha = getAlumnoFichaMedicaState(alumnoId);
+      printWindow.document.open();
+      printWindow.document.write(buildAlumnoFichaMedicaPrintHtml(alumno, ficha));
+      printWindow.document.close();
+    }
+
     function renderAlumnoEditor() {
       const editorHost = $('adminAlumnoEditor');
       if (!editorHost) return;
@@ -5388,6 +5628,15 @@
       if ($('adminAlumnoQuickActions')) {
         $('adminAlumnoQuickActions').hidden = !selectedAlumno;
         $('adminAlumnoQuickActions').innerHTML = selectedAlumno ? buildAlumnoQuickActionsMarkup(selectedAlumno) : '';
+      }
+      const fichaSummary = $('adminAlumnoFichaMedicaCollapsed');
+      if (fichaSummary) {
+        fichaSummary.hidden = !selectedAlumno || !!state.alumnosUi.fichaMedicaOpen;
+      }
+      const fichaPanel = $('adminAlumnoFichaMedicaPanel');
+      if (fichaPanel) {
+        fichaPanel.hidden = !selectedAlumno || !state.alumnosUi.fichaMedicaOpen;
+        if (selectedAlumno && state.alumnosUi.fichaMedicaOpen) syncAlumnoFichaMedicaInputs(selectedAlumno.alumno_id);
       }
     }
 
@@ -5581,6 +5830,93 @@
                     '<textarea id="adminAlumnoNotas" rows="4" placeholder="Notas internas para administraci&oacute;n"></textarea>',
                   '</label>',
                 '</div>',
+                '<div id="adminAlumnoFichaMedicaCollapsed" class="admin-alumnos-medical-summary" hidden>',
+                  '<div>',
+                    '<strong>Ficha m&eacute;dica</strong>',
+                    '<span>Datos privados solo para administraci&oacute;n.</span>',
+                  '</div>',
+                  '<button id="adminAlumnoMedToggleBtn" class="btn-ghost" type="button">Abrir ficha m&eacute;dica</button>',
+                '</div>',
+                '<section id="adminAlumnoFichaMedicaPanel" class="admin-alumnos-medical-panel" hidden>',
+                  '<div class="admin-alumnos-section-head compact">',
+                    '<div>',
+                      '<h4>Ficha m&eacute;dica</h4>',
+                      '<div id="adminAlumnoMedStatus" class="subtle">Sin ficha m&eacute;dica guardada.</div>',
+                    '</div>',
+                    '<div class="actions compact admin-alumnos-panel-actions">',
+                      '<button id="adminAlumnoMedCloseBtn" class="btn-ghost" type="button">Ocultar</button>',
+                      '<button id="adminAlumnoMedPrintBtn" class="btn-ghost" type="button">Imprimir</button>',
+                      '<button id="adminAlumnoMedSaveBtn" class="btn-secondary" type="button">Guardar ficha</button>',
+                    '</div>',
+                  '</div>',
+                  '<div class="admin-alumnos-editor-grid">',
+                    '<label class="field">',
+                      '<span>Contacto emergencia</span>',
+                      '<input id="adminAlumnoMedContactoNombre" type="text" maxlength="150" placeholder="Nombre completo">',
+                    '</label>',
+                    '<label class="field">',
+                      '<span>Tel&eacute;fono emergencia</span>',
+                      '<input id="adminAlumnoMedContactoTelefono" type="text" maxlength="60" placeholder="Tel&eacute;fono">',
+                    '</label>',
+                    '<label class="field">',
+                      '<span>Contacto emergencia 2</span>',
+                      '<input id="adminAlumnoMedContacto2Nombre" type="text" maxlength="150" placeholder="Nombre completo">',
+                    '</label>',
+                    '<label class="field">',
+                      '<span>Tel&eacute;fono emergencia 2</span>',
+                      '<input id="adminAlumnoMedContacto2Telefono" type="text" maxlength="60" placeholder="Tel&eacute;fono">',
+                    '</label>',
+                    '<label class="field">',
+                      '<span>Tipo de sangre</span>',
+                      '<input id="adminAlumnoMedTipoSangre" type="text" maxlength="30" placeholder="Ej. O+, A-, sin dato">',
+                    '</label>',
+                    '<label class="field">',
+                      '<span>Compa&ntilde;&iacute;a de seguro</span>',
+                      '<input id="adminAlumnoMedSeguroCompania" type="text" maxlength="150" placeholder="Aseguradora">',
+                    '</label>',
+                    '<label class="field">',
+                      '<span>P&oacute;liza / n&uacute;mero</span>',
+                      '<input id="adminAlumnoMedSeguroPoliza" type="text" maxlength="150" placeholder="P&oacute;liza o folio">',
+                    '</label>',
+                    '<label class="field">',
+                      '<span>Tel&eacute;fono seguro</span>',
+                      '<input id="adminAlumnoMedSeguroTelefono" type="text" maxlength="60" placeholder="Tel&eacute;fono del seguro">',
+                    '</label>',
+                    '<label class="field">',
+                      '<span>Sabe nadar</span>',
+                      '<select id="adminAlumnoMedSabeNadar">',
+                        '<option value="">Sin dato</option>',
+                        '<option value="si">S&iacute;</option>',
+                        '<option value="no">No</option>',
+                        '<option value="no_seguro">No confirmado</option>',
+                      '</select>',
+                    '</label>',
+                    '<label class="field admin-alumnos-field-full">',
+                      '<span>Alergias</span>',
+                      '<textarea id="adminAlumnoMedAlergias" class="admin-alumnos-medical-textarea" rows="1" placeholder="Alergias conocidas"></textarea>',
+                    '</label>',
+                    '<label class="field admin-alumnos-field-full">',
+                      '<span>Condiciones m&eacute;dicas</span>',
+                      '<textarea id="adminAlumnoMedCondiciones" class="admin-alumnos-medical-textarea" rows="1" placeholder="Condiciones relevantes"></textarea>',
+                    '</label>',
+                    '<label class="field admin-alumnos-field-full">',
+                      '<span>Medicamentos</span>',
+                      '<textarea id="adminAlumnoMedMedicamentos" class="admin-alumnos-medical-textarea" rows="1" placeholder="Medicamentos o indicaciones"></textarea>',
+                    '</label>',
+                    '<label class="field admin-alumnos-field-full">',
+                      '<span>Restricciones de actividad</span>',
+                      '<textarea id="adminAlumnoMedRestricciones" class="admin-alumnos-medical-textarea" rows="1" placeholder="Restricciones f&iacute;sicas o de actividad"></textarea>',
+                    '</label>',
+                    '<label class="field admin-alumnos-field-full">',
+                      '<span>Notas de seguro</span>',
+                      '<textarea id="adminAlumnoMedSeguroNotas" class="admin-alumnos-medical-textarea" rows="1" placeholder="Datos adicionales del seguro"></textarea>',
+                    '</label>',
+                    '<label class="field admin-alumnos-field-full">',
+                      '<span>Notas de cuidado</span>',
+                      '<textarea id="adminAlumnoMedNotas" class="admin-alumnos-medical-textarea" rows="1" placeholder="Indicaciones de cuidado administrativo"></textarea>',
+                    '</label>',
+                  '</div>',
+                '</section>',
                 '<div class="actions compact admin-alumnos-panel-actions">',
                   '<button id="adminAlumnoCancelBtn" class="btn-ghost" type="button">Cancelar</button>',
                   '<button id="adminAlumnoSaveBtn" class="btn-primary" type="button">Guardar</button>',
@@ -5763,6 +6099,23 @@
       if ($('adminAlumnoGrupo')) $('adminAlumnoGrupo').addEventListener('change', (event) => { state.alumnosUi.editor.grupo_id = event.currentTarget.value; });
       if ($('adminAlumnoStatus')) $('adminAlumnoStatus').addEventListener('change', (event) => { state.alumnosUi.editor.estatus = event.currentTarget.value; });
       if ($('adminAlumnoNotas')) $('adminAlumnoNotas').addEventListener('input', (event) => { state.alumnosUi.editor.notas_internas = event.currentTarget.value; });
+      if ($('adminAlumnoMedToggleBtn')) $('adminAlumnoMedToggleBtn').addEventListener('click', () => toggleAlumnoFichaMedica(true));
+      if ($('adminAlumnoMedCloseBtn')) $('adminAlumnoMedCloseBtn').addEventListener('click', () => toggleAlumnoFichaMedica(false));
+      const fichaInputs = getAlumnoFichaInputMap();
+      Object.keys(fichaInputs).forEach((field) => {
+        const el = $(fichaInputs[field]);
+        if (!el) return;
+        const eventName = el.tagName === 'SELECT' ? 'change' : 'input';
+        el.addEventListener(eventName, (event) => updateAlumnoFichaMedicaDraft(field, event.currentTarget.value));
+      });
+      if ($('adminAlumnoMedSaveBtn')) $('adminAlumnoMedSaveBtn').addEventListener('click', (event) => saveAlumnoFichaMedica(event.currentTarget));
+      if ($('adminAlumnoMedPrintBtn')) $('adminAlumnoMedPrintBtn').addEventListener('click', (event) => {
+        handleAction('imprimirFichaMedica', () => printAlumnoFichaMedica(event.currentTarget), {
+          button: event.currentTarget,
+          key: buildActionKey('imprimirFichaMedica', [state.alumnosUi.selectedAlumnoId || '']),
+          busyText: 'Preparando'
+        });
+      });
       if ($('adminAlumnoCancelBtn')) $('adminAlumnoCancelBtn').addEventListener('click', () => {
         closeAlumnoEditor();
         renderAdminAlumnosModule();
