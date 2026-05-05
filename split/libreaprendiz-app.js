@@ -4669,6 +4669,25 @@
       return rows[index];
     }
 
+    function snapshotCatalogCollections(collectionKeys) {
+      return (collectionKeys || []).reduce((acc, key) => {
+        acc[key] = Array.isArray(state.catalogos && state.catalogos[key])
+          ? state.catalogos[key].map((row) => Object.assign({}, row))
+          : [];
+        return acc;
+      }, {});
+    }
+
+    function restoreCatalogCollections(snapshot) {
+      if (!snapshot || !state.catalogos) return;
+      Object.keys(snapshot).forEach((key) => {
+        state.catalogos[key] = Array.isArray(snapshot[key])
+          ? snapshot[key].map((row) => Object.assign({}, row))
+          : [];
+      });
+      bumpCatalogosRevision();
+    }
+
     function applySavedAlumnoCatalogRow(row) {
       return upsertCatalogEntityRow('alumnos', 'alumno_id', row);
     }
@@ -8665,6 +8684,19 @@
       return applySavedSubmateriaCatalogRow(Object.assign({}, current, patch));
     }
 
+    function reconcileAdminMateriasCatalogosSoon() {
+      if (!canUseAdminShell()) return;
+      scheduleAfterPaint(() => refreshCatalogos({
+        blocks: ['materias', 'materias_admin', 'submaterias', 'submaterias_admin']
+      })
+        .then(() => {
+          if (String(state.activeAdminModule || '').trim() === 'materias') {
+            renderAdminModuleSurface('materias', { includeStats: false });
+          }
+        })
+        .catch(() => null), 120);
+    }
+
     function getAdminSubmateriasCatalog() {
       const revision = getCatalogosRevision();
       if (adminCatalogMemo.submaterias.revision === revision) {
@@ -9114,28 +9146,66 @@
         if (!payload.materia_id) throw new Error('Captura la materia ID.');
         if (!payload.nombre) throw new Error('Captura el nombre de la materia.');
         const currentMateria = getMateriaBaseRows().find((item) => item.materia_id === payload.materia_id) || {};
-        const data = await api('guardarMateria', payload);
-        const backendMateria = data && data.materia ? data.materia : {};
-        const savedAt = String(backendMateria.fecha_actualizacion || new Date().toISOString());
+        const catalogSnapshot = snapshotCatalogCollections(['materias_admin', 'materias']);
+        const editorSnapshot = Object.assign({}, state.materiasUi.editor || {});
+        const selectedMateriaSnapshot = state.materiasUi.selectedMateriaId;
+        const localSavedAt = new Date().toISOString();
         const archivedAt = payload.estatus === 'archivada'
-          ? String(backendMateria.archivado_at || currentMateria.archivado_at || savedAt)
+          ? String(currentMateria.archivado_at || localSavedAt)
           : '';
-        const savedMateria = applySavedMateriaCatalogRow(Object.assign({}, currentMateria, backendMateria, {
+        const optimisticMateria = applySavedMateriaCatalogRow(Object.assign({}, currentMateria, {
           materia_id: payload.materia_id,
           nombre: payload.nombre,
           tipo: payload.admite_submaterias ? 'con_submaterias' : 'simple',
           activo: payload.estatus === 'activa',
           admite_submaterias: payload.admite_submaterias,
           estatus: payload.estatus,
-          fecha_actualizacion: savedAt,
+          fecha_actualizacion: localSavedAt,
           archivado_at: archivedAt,
           archivado_por: archivedAt
-            ? String(backendMateria.archivado_por || (state.session && state.session.usuario && state.session.usuario.facilitador_id) || '')
+            ? String((state.session && state.session.usuario && state.session.usuario.facilitador_id) || '')
             : ''
         }));
         closeMateriaEditor();
-        state.materiasUi.selectedMateriaId = (savedMateria && savedMateria.materia_id) || data.materia_id || payload.materia_id;
+        state.materiasUi.selectedMateriaId = (optimisticMateria && optimisticMateria.materia_id) || payload.materia_id;
         renderAdminModuleSurface('materias');
+        try {
+          const data = await api('guardarMateria', payload);
+          const backendMateria = data && data.materia ? data.materia : {};
+          const savedAt = String(backendMateria.fecha_actualizacion || localSavedAt);
+          const backendArchivedAt = payload.estatus === 'archivada'
+            ? String(backendMateria.archivado_at || archivedAt || savedAt)
+            : '';
+          const savedMateria = applySavedMateriaCatalogRow(Object.assign({}, currentMateria, backendMateria, {
+            materia_id: payload.materia_id,
+            nombre: payload.nombre,
+            tipo: payload.admite_submaterias ? 'con_submaterias' : 'simple',
+            activo: payload.estatus === 'activa',
+            admite_submaterias: payload.admite_submaterias,
+            estatus: payload.estatus,
+            fecha_actualizacion: savedAt,
+            archivado_at: backendArchivedAt,
+            archivado_por: backendArchivedAt
+              ? String(backendMateria.archivado_por || (state.session && state.session.usuario && state.session.usuario.facilitador_id) || '')
+              : ''
+          }));
+          state.materiasUi.selectedMateriaId = (savedMateria && savedMateria.materia_id) || data.materia_id || payload.materia_id;
+          reconcileAdminMateriasCatalogosSoon();
+        } catch (err) {
+          restoreCatalogCollections(catalogSnapshot);
+          state.materiasUi.editorMode = mode;
+          state.materiasUi.editorOpen = true;
+          state.materiasUi.subEditorOpen = false;
+          state.materiasUi.selectedMateriaId = selectedMateriaSnapshot;
+          state.materiasUi.editor = Object.assign({}, editorSnapshot, {
+            materia_id: payload.materia_id,
+            nombre: payload.nombre,
+            admite_submaterias: payload.admite_submaterias,
+            estatus: payload.estatus
+          });
+          renderAdminModuleSurface('materias');
+          throw err;
+        }
         setBanner(mode === 'new' ? 'Materia creada.' : 'Materia actualizada.', 'success');
       }, {
         button,
@@ -9181,7 +9251,11 @@
         if (!payload.materia_id) throw new Error('Selecciona una materia base.');
         if (!payload.submateria_id) throw new Error('Captura la submateria ID.');
         if (!payload.nombre) throw new Error('Captura el nombre de la submateria.');
-        await api('guardarSubmateria', payload);
+        const catalogSnapshot = snapshotCatalogCollections(['submaterias_admin', 'submaterias']);
+        const editorSnapshot = Object.assign({}, state.materiasUi.subEditor || {});
+        const selectedMateriaSnapshot = state.materiasUi.selectedMateriaId;
+        const subEditorModeSnapshot = state.materiasUi.subEditorMode;
+        const savedAt = new Date().toISOString();
         applySavedSubmateriaCatalogRow(Object.assign({}, state.materiasUi.subEditorMode === 'edit'
           ? (getAdminSubmateriasCatalog().find((item) => item.submateria_id === payload.submateria_id) || {})
           : {}, {
@@ -9189,13 +9263,31 @@
           submateria_id: payload.submateria_id,
           nombre: payload.nombre,
           estatus: payload.estatus,
-          fecha_actualizacion: new Date().toISOString(),
-          archivado_at: payload.estatus === 'archivada' ? new Date().toISOString() : '',
+          fecha_actualizacion: savedAt,
+          archivado_at: payload.estatus === 'archivada' ? savedAt : '',
           archivado_por: payload.estatus === 'archivada' ? String(state.session && state.session.usuario && state.session.usuario.facilitador_id || '') : ''
         }));
         closeSubmateriaEditor();
         state.materiasUi.selectedMateriaId = payload.materia_id;
         renderAdminModuleSurface('materias');
+        try {
+          await api('guardarSubmateria', payload);
+          reconcileAdminMateriasCatalogosSoon();
+        } catch (err) {
+          restoreCatalogCollections(catalogSnapshot);
+          state.materiasUi.selectedMateriaId = selectedMateriaSnapshot || payload.materia_id;
+          state.materiasUi.subEditorMode = subEditorModeSnapshot;
+          state.materiasUi.subEditorOpen = true;
+          state.materiasUi.editorOpen = false;
+          state.materiasUi.subEditor = Object.assign({}, editorSnapshot, {
+            materia_id: payload.materia_id,
+            submateria_id: payload.submateria_id,
+            nombre: payload.nombre,
+            estatus: payload.estatus
+          });
+          renderAdminModuleSurface('materias');
+          throw err;
+        }
         setBanner('Submateria guardada.', 'success');
       }, {
         button,
