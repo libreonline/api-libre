@@ -98,9 +98,11 @@
         historyByAlumno: {},
         notesByAlumno: {},
         fichaMedicaByAlumno: {},
+        fichaMedicaSavedByAlumno: {},
         fichaMedicaLoadedByAlumno: {},
         fichaMedicaLoadingByAlumno: {},
         fichaMedicaFailedByAlumno: {},
+        inlineFeedbackByAlumno: {},
         deleteControl: createEmptyAlumnoDeleteState(),
         mockRows: []
       };
@@ -4769,6 +4771,86 @@
       return applySavedAlumnoCatalogRow(Object.assign({}, current, patch));
     }
 
+    function getAlumnoInlineFeedback(alumnoId) {
+      const id = String(alumnoId || '').trim();
+      if (!id || !state.alumnosUi || !state.alumnosUi.inlineFeedbackByAlumno) return null;
+      return state.alumnosUi.inlineFeedbackByAlumno[id] || null;
+    }
+
+    function setAlumnoInlineFeedback(alumnoId, text, kind = 'info', options = {}) {
+      const id = String(alumnoId || '').trim();
+      if (!id || !state.alumnosUi) return;
+      if (!state.alumnosUi.inlineFeedbackByAlumno) state.alumnosUi.inlineFeedbackByAlumno = {};
+      const token = String(Date.now()) + '-' + Math.random().toString(36).slice(2);
+      state.alumnosUi.inlineFeedbackByAlumno[id] = {
+        text: String(text || '').trim(),
+        kind: String(kind || 'info').trim() || 'info',
+        token
+      };
+      if (options.render !== false) renderAdminModuleSurface('alumnos');
+      const autoClearMs = Number(options.autoClearMs || 0);
+      if (autoClearMs > 0) {
+        window.setTimeout(() => {
+          if (!state.alumnosUi || !state.alumnosUi.inlineFeedbackByAlumno) return;
+          const current = state.alumnosUi.inlineFeedbackByAlumno[id];
+          if (!current || current.token !== token) return;
+          delete state.alumnosUi.inlineFeedbackByAlumno[id];
+          if (state.activeAdminModule === 'alumnos') renderAdminModuleSurface('alumnos');
+        }, autoClearMs);
+      }
+    }
+
+    function clearAlumnoInlineFeedback(alumnoId) {
+      const id = String(alumnoId || '').trim();
+      if (!id || !state.alumnosUi || !state.alumnosUi.inlineFeedbackByAlumno) return;
+      delete state.alumnosUi.inlineFeedbackByAlumno[id];
+    }
+
+    function buildOptimisticAlumnoCatalogRow(existingAlumno, payload) {
+      if (!existingAlumno || !payload) return null;
+      const alumnoId = String(existingAlumno.alumno_id || payload.alumno_id || '').trim();
+      if (!alumnoId) return null;
+      return Object.assign({}, existingAlumno, {
+        alumno_id: alumnoId,
+        matricula: String(payload.matricula || existingAlumno.matricula || '').trim(),
+        nombre_completo: String(payload.nombre_completo || existingAlumno.nombre_completo || '').trim(),
+        nombre_mostrado: String(payload.nombre_mostrado || payload.nombre_completo || existingAlumno.nombre_mostrado || '').trim(),
+        grupo_id: String(payload.grupo_id || existingAlumno.grupo_id || '').trim(),
+        nivel_id: String(payload.nivel_id || '').trim(),
+        estatus: String(payload.estatus || existingAlumno.estatus || 'activo').trim(),
+        notas_internas: String(payload.notas_internas || '').trim(),
+        fecha_actualizacion: new Date().toISOString()
+      });
+    }
+
+    function captureAlumnoEditorRollbackState(alumnoId) {
+      const id = String(alumnoId || '').trim();
+      return {
+        alumnoId: id,
+        selectedAlumnoId: String(state.alumnosUi && state.alumnosUi.selectedAlumnoId || '').trim(),
+        editorMode: String(state.alumnosUi && state.alumnosUi.editorMode || 'new').trim() || 'new',
+        editor: Object.assign({}, state.alumnosUi && state.alumnosUi.editor || createEmptyAlumnoEditorState()),
+        fichaMedicaOpen: !!(state.alumnosUi && state.alumnosUi.fichaMedicaOpen),
+        alumnos: snapshotCatalogCollections(['alumnos']),
+        note: id ? state.alumnosUi.notesByAlumno[id] : undefined
+      };
+    }
+
+    function restoreAlumnoEditorRollbackState(snapshot) {
+      if (!snapshot || !state.alumnosUi) return;
+      restoreCatalogCollections(snapshot.alumnos);
+      if (snapshot.alumnoId) {
+        if (snapshot.note === undefined) delete state.alumnosUi.notesByAlumno[snapshot.alumnoId];
+        else state.alumnosUi.notesByAlumno[snapshot.alumnoId] = snapshot.note;
+      }
+      state.alumnosUi.editorOpen = true;
+      state.alumnosUi.editorMode = snapshot.editorMode || 'edit';
+      state.alumnosUi.selectedAlumnoId = snapshot.selectedAlumnoId || snapshot.alumnoId || '';
+      state.alumnosUi.editor = Object.assign(createEmptyAlumnoEditorState(), snapshot.editor || {});
+      state.alumnosUi.fichaMedicaOpen = !!snapshot.fichaMedicaOpen;
+      bumpAlumnosSourceRevision();
+    }
+
     function pushAlumnoHistory(alumnoId, tipo, titulo, detalle, fecha) {
       const id = String(alumnoId || '').trim();
       if (!id) return;
@@ -5042,6 +5124,7 @@
       try {
         const response = await api('getAlumnoFichaMedica', { alumno_id: id });
         state.alumnosUi.fichaMedicaByAlumno[id] = normalizeAlumnoFichaMedica(response && response.ficha, id);
+        state.alumnosUi.fichaMedicaSavedByAlumno[id] = normalizeAlumnoFichaMedica(response && response.ficha, id);
         state.alumnosUi.fichaMedicaLoadedByAlumno[id] = true;
         return state.alumnosUi.fichaMedicaByAlumno[id];
       } catch (error) {
@@ -5112,6 +5195,10 @@
       closeCambioGrupo();
       closeAlumnoHistorial();
       renderAdminAlumnosModule();
+      focusAdminFacilitadorPanel(
+        'adminAlumnoEditor',
+        mode === 'edit' ? 'adminAlumnoNombres' : 'adminAlumnoMatricula'
+      );
     }
 
     async function saveAlumnoEditor(button) {
@@ -5143,7 +5230,34 @@
           notas_internas: String(editor.notas_internas || '').trim()
         };
         if (statusNote) payload.motivo = statusNote;
-        const response = await api('guardarAlumno', payload);
+        const canUseOptimisticAlumnoSave = editing &&
+          existingAlumno &&
+          previousStatus === nextStatus &&
+          String(existingAlumno.grupo_id || '').trim() === String(payload.grupo_id || '').trim();
+        let rollbackState = null;
+        if (canUseOptimisticAlumnoSave) {
+          rollbackState = captureAlumnoEditorRollbackState(existingId);
+          const optimisticAlumno = buildOptimisticAlumnoCatalogRow(existingAlumno, payload);
+          if (optimisticAlumno) {
+            state.alumnosUi.notesByAlumno[existingId] = String(payload.notas_internas || '').trim();
+            applySavedAlumnoCatalogRow(optimisticAlumno);
+            bumpAlumnosSourceRevision();
+            setAlumnoInlineFeedback(existingId, 'Guardando cambios...', 'info', { render: false });
+            closeAlumnoEditor();
+            renderAdminModuleSurface('alumnos');
+          }
+        }
+        let response = null;
+        try {
+          response = await api('guardarAlumno', payload);
+        } catch (error) {
+          if (rollbackState) {
+            clearAlumnoInlineFeedback(existingId);
+            restoreAlumnoEditorRollbackState(rollbackState);
+            renderAdminModuleSurface('alumnos');
+          }
+          throw error;
+        }
         const savedId = (response && response.alumno_id) || existingId || '';
         const savedAlumno = response && response.alumno ? response.alumno : null;
         if (savedId) {
@@ -5159,9 +5273,12 @@
           );
           invalidateAlumnoHistorialCache(savedId);
         }
-        closeAlumnoEditor();
+        if (!canUseOptimisticAlumnoSave) closeAlumnoEditor();
+        if (canUseOptimisticAlumnoSave && savedId) {
+          setAlumnoInlineFeedback(savedId, 'Ficha actualizada.', 'success', { render: false, autoClearMs: 2600 });
+        }
         renderAdminModuleSurface('alumnos');
-        setBanner(editing ? 'Ficha actualizada.' : 'Alumno creado.', 'success');
+        if (!canUseOptimisticAlumnoSave) setBanner(editing ? 'Ficha actualizada.' : 'Alumno creado.', 'success');
       }, {
         button,
         key: buildActionKey('guardarAlumno', [existingId || editor.matricula, editor.grupo_id]),
@@ -5181,6 +5298,7 @@
       closeAlumnoEditor();
       closeAlumnoHistorial();
       renderAdminAlumnosModule();
+      focusAdminFacilitadorPanel('adminAlumnoCambioGrupo', 'adminAlumnoCambioGrupoNuevo');
     }
 
     async function updateAlumnoStatus(alumnoId, nextStatus, button, options) {
@@ -5426,6 +5544,7 @@
       if (ids.has(String(state.alumnosUi.cambioGrupo && state.alumnosUi.cambioGrupo.alumno_id || '').trim())) closeCambioGrupo();
       ids.forEach((id) => {
         delete state.alumnosUi.fichaMedicaByAlumno[id];
+        delete state.alumnosUi.fichaMedicaSavedByAlumno[id];
         delete state.alumnosUi.fichaMedicaLoadedByAlumno[id];
         delete state.alumnosUi.fichaMedicaLoadingByAlumno[id];
         delete state.alumnosUi.fichaMedicaFailedByAlumno[id];
@@ -5559,6 +5678,7 @@
       closeAlumnoEditor();
       closeCambioGrupo();
       renderAdminAlumnosModule();
+      focusAdminFacilitadorPanel('adminAlumnoHistorial');
       loadAlumnoHistorialRemoto(alumno.alumno_id);
     }
 
@@ -5662,8 +5782,30 @@
         ALUMNO_FICHA_MEDICA_FIELDS.forEach((field) => {
           payload[field] = String(ficha[field] || '').trim();
         });
-        const response = await api('guardarAlumnoFichaMedica', payload);
+        const previousFicha = normalizeAlumnoFichaMedica(
+          state.alumnosUi.fichaMedicaSavedByAlumno[alumnoId] ||
+            state.alumnosUi.fichaMedicaByAlumno[alumnoId] ||
+            {},
+          alumnoId
+        );
+        state.alumnosUi.fichaMedicaByAlumno[alumnoId] = normalizeAlumnoFichaMedica(Object.assign({}, payload, {
+          fecha_actualizacion: new Date().toISOString()
+        }), alumnoId);
+        state.alumnosUi.fichaMedicaLoadedByAlumno[alumnoId] = true;
+        state.alumnosUi.fichaMedicaFailedByAlumno[alumnoId] = false;
+        renderAdminAlumnosModule();
+        let response = null;
+        try {
+          response = await api('guardarAlumnoFichaMedica', payload);
+        } catch (error) {
+          state.alumnosUi.fichaMedicaByAlumno[alumnoId] = previousFicha;
+          state.alumnosUi.fichaMedicaLoadedByAlumno[alumnoId] = true;
+          state.alumnosUi.fichaMedicaFailedByAlumno[alumnoId] = true;
+          renderAdminAlumnosModule();
+          throw error;
+        }
         state.alumnosUi.fichaMedicaByAlumno[alumnoId] = normalizeAlumnoFichaMedica(response && response.ficha, alumnoId);
+        state.alumnosUi.fichaMedicaSavedByAlumno[alumnoId] = normalizeAlumnoFichaMedica(response && response.ficha, alumnoId);
         state.alumnosUi.fichaMedicaLoadedByAlumno[alumnoId] = true;
         state.alumnosUi.fichaMedicaFailedByAlumno[alumnoId] = false;
         renderAdminAlumnosModule();
@@ -5855,12 +5997,16 @@
         '</div>' +
         rows.map((row) => {
           const visualStatus = getAlumnoStatusVisual(row);
+          const inlineFeedback = getAlumnoInlineFeedback(row.alumno_id);
+          const inlineFeedbackHtml = inlineFeedback && inlineFeedback.text
+            ? '<div class="admin-alumnos-inline-feedback is-' + escapeHtml(inlineFeedback.kind || 'info') + '">' + escapeHtml(inlineFeedback.text) + '</div>'
+            : '';
           const actions = [
             '<button class="btn-ghost" type="button" onclick="openAlumnoEditor(\'edit\', \'' + escapeJsAttrValue(row.alumno_id) + '\')">Editar</button>'
           ];
           return '<article class="admin-alumnos-row">' +
             '<div class="admin-alumnos-cell"><div class="mini">' + escapeHtml(getAlumnoSecondaryLabel(row)) + '</div></div>' +
-            '<div class="admin-alumnos-title"><button class="admin-alumnos-title-btn" type="button" onclick="openAlumnoHistorial(\'' + escapeJsAttrValue(row.alumno_id) + '\')">' + escapeHtml(getAlumnoNameLabel(row)) + '</button><div class="mini" title="' + escapeHtml(row.alumno_id || '') + '">ID: ' + escapeHtml(getAlumnoCompactId(row) || '-') + '</div></div>' +
+            '<div class="admin-alumnos-title"><button class="admin-alumnos-title-btn" type="button" onclick="openAlumnoHistorial(\'' + escapeJsAttrValue(row.alumno_id) + '\')">' + escapeHtml(getAlumnoNameLabel(row)) + '</button><div class="mini" title="' + escapeHtml(row.alumno_id || '') + '">ID: ' + escapeHtml(getAlumnoCompactId(row) || '-') + '</div>' + inlineFeedbackHtml + '</div>' +
             '<div class="admin-alumnos-cell"><div class="mini">' + escapeHtml(getAlumnoGrupoDisplayLabel(row)) + '</div></div>' +
             '<div class="admin-alumnos-cell"><span class="admin-alumnos-badge ' + getAlumnoStatusBadgeClass(visualStatus) + '">' + escapeHtml(getAlumnoStatusLabel(visualStatus)) + '</span></div>' +
             '<div class="admin-alumnos-cell"><div class="mini">' + escapeHtml(row.fecha_alta ? formatFechaHumana(row.fecha_alta) : 'Sin fecha') + '</div></div>' +
@@ -7665,8 +7811,14 @@
       window.requestAnimationFrame(() => {
         const panel = $(panelId);
         if (!panel || panel.hidden || typeof panel.scrollIntoView !== 'function') return;
+        const side = panel.closest ? panel.closest('.admin-alumnos-side') : null;
+        if (side) side.scrollTop = 0;
         panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
         window.setTimeout(() => {
+          const rect = panel.getBoundingClientRect();
+          if (rect.top < 0 || rect.top > 72) {
+            panel.scrollIntoView({ behavior: 'auto', block: 'start' });
+          }
           const firstField = fieldId ? $(fieldId) : null;
           if (firstField && typeof firstField.focus === 'function') {
             firstField.focus({ preventScroll: true });
@@ -9624,6 +9776,7 @@
     }
 
     function fillSelect(select, items, getValue, getLabel, placeholder = 'Selecciona') {
+      if (!select) return;
       const current = select.value;
       const options = ['<option value="">' + escapeHtml(placeholder) + '</option>'];
       items.forEach((item) => {

@@ -1958,6 +1958,13 @@
       gap: 14px;
       position: sticky;
       top: 16px;
+      align-self: start;
+      max-height: calc(100dvh - 32px);
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding-right: 4px;
+      scrollbar-gutter: stable;
     }
     .admin-alumnos-panel {
       padding: 14px;
@@ -2098,6 +2105,32 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .admin-alumnos-inline-feedback {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      max-width: 100%;
+      min-height: 22px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(31, 182, 229, 0.34);
+      background: rgba(31, 182, 229, 0.12);
+      color: var(--la-cyan);
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .admin-alumnos-inline-feedback.is-success {
+      border-color: rgba(184, 216, 50, 0.34);
+      background: rgba(184, 216, 50, 0.12);
+      color: var(--la-lime);
+    }
+    .admin-alumnos-inline-feedback.is-error {
+      border-color: rgba(232, 25, 106, 0.32);
+      background: rgba(232, 25, 106, 0.12);
+      color: #ff8fb3;
     }
     .admin-alumnos-badge {
       display: inline-flex;
@@ -3912,6 +3945,10 @@
       }
       .admin-alumnos-side {
         position: static;
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+        scrollbar-gutter: auto;
       }
       .admin-alumnos-list-header {
         display: none;
@@ -6439,7 +6476,7 @@
     </div>
   </div>
 
-<script defer src="./libreaprendiz-app.js?v=20260504-admin-planeaciones-idle-warmup-v1"></script>
+<script defer src="./libreaprendiz-app.js?v=20260505-admin-side-panel-scroll-v1"></script>
 </body>
 </html>
 
