@@ -947,6 +947,12 @@
       }, delay);
     }
 
+    function scheduleAdminDashboardIdleWork() {
+      scheduleAdminCatalogPrefetch(900);
+      scheduleAdminPlaneacionesWarmup(1450);
+      scheduleAdminNotificationsPrefetch(1180);
+    }
+
     async function prefetchAdminCatalogsSequentially() {
       if (!canUseAdminShell()) return;
       for (const moduleName of getAdminCatalogPrefetchModules()) {
@@ -2648,11 +2654,17 @@
           }
         }
         renderFacilitadorSuplenciasActivasHost();
+      } catch (err) {
+        if (!append) {
+          setBanner(formatApiError(err), 'error');
+        }
+        throw err;
       } finally {
         if (state.ui) {
           state.ui.planeacionesLoading = false;
           state.ui.planeacionesLoadingMore = false;
         }
+        if (isPlaneacionesSurfaceVisible()) renderPlaneacionesList();
       }
     }
 
@@ -4068,6 +4080,7 @@
         renderPlanBuilderVisibility();
       } else if (nextModule === 'dashboard') {
         renderAlertas();
+        scheduleAdminDashboardIdleWork();
       } else {
         renderActiveAdminModule(nextModule);
       }
@@ -4122,9 +4135,7 @@
         panel.classList.toggle('is-active', panel.id === 'admin-panel-' + state.activeAdminModule);
       });
       if (String(state.activeAdminModule || '').trim() === 'dashboard') {
-        scheduleAdminCatalogPrefetch(900);
-        scheduleAdminPlaneacionesWarmup(1450);
-        scheduleAdminNotificationsPrefetch(1180);
+        scheduleAdminDashboardIdleWork();
       }
     }
 
@@ -6993,7 +7004,12 @@
         offset: 0
       })
         .then((data) => {
-          if (String(state.facilitadoresUi.selectedFacilitadorId || '').trim() !== id) return;
+          if (String(state.facilitadoresUi.selectedFacilitadorId || '').trim() !== id) {
+            if (String(state.facilitadoresUi.pulsePlaneacionesFacilitadorId || '').trim() === id) {
+              state.facilitadoresUi.pulsePlaneacionesLoading = false;
+            }
+            return;
+          }
           state.facilitadoresUi.pulsePlaneacionesFacilitadorId = id;
           state.facilitadoresUi.pulsePlaneaciones = Array.isArray(data && data.rows) ? data.rows : [];
           state.facilitadoresUi.pulsePlaneacionesLoading = false;
@@ -7001,7 +7017,12 @@
           renderAdminFacilitadoresModule();
         })
         .catch((err) => {
-          if (String(state.facilitadoresUi.selectedFacilitadorId || '').trim() !== id) return;
+          if (String(state.facilitadoresUi.selectedFacilitadorId || '').trim() !== id) {
+            if (String(state.facilitadoresUi.pulsePlaneacionesFacilitadorId || '').trim() === id) {
+              state.facilitadoresUi.pulsePlaneacionesLoading = false;
+            }
+            return;
+          }
           state.facilitadoresUi.pulsePlaneacionesFacilitadorId = id;
           state.facilitadoresUi.pulsePlaneaciones = [];
           state.facilitadoresUi.pulsePlaneacionesLoading = false;
