@@ -312,6 +312,7 @@
         planeacionesRestoreLock: false,
         adminModuleLoading: {},
         adminCatalogPrefetchPromise: null,
+        adminCatalogPrefetchScheduled: false,
         adminCatalogPrefetchDone: false,
         adminPlaneacionesWarmupPromise: null,
         adminPlaneacionesWarmupDone: false,
@@ -846,7 +847,7 @@
     }
 
     function getAdminCatalogPrefetchModules() {
-      return ['alumnos', 'materias', 'talleres', 'facilitadores'];
+      return ['alumnos', 'facilitadores', 'materias', 'talleres'];
     }
 
     function hasAdminCatalogPrefetchWork() {
@@ -860,13 +861,15 @@
 
     function scheduleAdminCatalogPrefetch(delay = 520) {
       if (!canUseAdminShell() || !state.ui) return;
-      if (state.ui.adminCatalogPrefetchPromise || state.ui.adminCatalogPrefetchDone) return;
+      if (state.ui.adminCatalogPrefetchPromise || state.ui.adminCatalogPrefetchScheduled || state.ui.adminCatalogPrefetchDone) return;
       if (String(state.activeAdminModule || '').trim() !== 'dashboard') return;
       if (!hasAdminCatalogPrefetchWork()) {
         state.ui.adminCatalogPrefetchDone = true;
         return;
       }
+      state.ui.adminCatalogPrefetchScheduled = true;
       scheduleUiDebounce('admin-catalog-prefetch', () => {
+        if (state.ui) state.ui.adminCatalogPrefetchScheduled = false;
         if (!canUseAdminShell() || !state.ui || state.ui.adminCatalogPrefetchPromise) return;
         if (state.ui.adminCatalogPrefetchDone) return;
         if (String(state.activeAdminModule || '').trim() !== 'dashboard') return;
@@ -1244,6 +1247,9 @@
         }
         state.ui.restoreSnapshotSyncFinishedTimeout = null;
         state.ui.restoreSnapshotSyncJustFinished = false;
+        state.ui.adminCatalogPrefetchPromise = null;
+        state.ui.adminCatalogPrefetchScheduled = false;
+        state.ui.adminCatalogPrefetchDone = false;
         state.ui.adminNotificationsPrefetchPromise = null;
         state.ui.adminNotificationsPrefetchDone = false;
         state.ui.adminPlaneacionesWarmupPromise = null;
@@ -3893,11 +3899,55 @@
       if (state.ui) state.ui.planeacionesTallerFilter = '';
     }
 
+    function syncAdminModuleNavButton(moduleName) {
+      const key = String(moduleName || '').trim();
+      if (!key) return;
+      const buttons = Array.from(document.querySelectorAll('.admin-nav-btn'));
+      const btn = buttons.find((item) => String(item.dataset.adminModule || '').trim() === key);
+      if (!btn) return;
+      const isActive = key === state.activeAdminModule;
+      const isLoading = isAdminModuleLoading(key);
+      if (!btn.dataset.defaultText) btn.dataset.defaultText = btn.textContent;
+      btn.classList.toggle('is-active', isActive);
+      btn.classList.toggle('is-loading', isLoading);
+      if (isLoading) {
+        btn.setAttribute('aria-busy', 'true');
+        btn.textContent = btn.dataset.defaultText + ' - Cargando...';
+      } else {
+        btn.removeAttribute('aria-busy');
+        btn.textContent = btn.dataset.defaultText;
+      }
+    }
+
+    function syncAdminModulePanel(moduleName) {
+      const key = String(moduleName || '').trim();
+      if (!key) return;
+      const panel = $('admin-panel-' + key);
+      if (!panel) return;
+      panel.classList.toggle('is-active', key === state.activeAdminModule);
+    }
+
+    function syncAdminActiveModuleChrome(previousModule, nextModule) {
+      if (!canUseAdminShell()) return;
+      ensureAdminShellMarkupLoaded();
+      const previousKey = String(previousModule || '').trim();
+      const nextKey = String(nextModule || '').trim();
+      if (!previousKey || !nextKey || previousKey === nextKey) {
+        renderAdminShell();
+        return;
+      }
+      syncAdminModuleNavButton(previousKey);
+      syncAdminModuleNavButton(nextKey);
+      syncAdminModulePanel(previousKey);
+      syncAdminModulePanel(nextKey);
+    }
+
     function activateAdminModule(moduleName) {
       if (!canUseAdminShell()) return;
       ensureAdminShellMarkupLoaded();
       bindWindowActionGroup('admin');
       const nextModule = moduleName || 'dashboard';
+      const previousModule = state.activeAdminModule;
       if (nextModule !== 'notificaciones' && state.ui && state.ui.notificationEditorExpanded) {
         resetNotificationEditor();
       }
@@ -3927,7 +3977,7 @@
       }
       state.activeAdminModule = nextModule;
       setAdminModuleError(nextModule, '');
-      renderAdminShell();
+      syncAdminActiveModuleChrome(previousModule, nextModule);
       const bootstrappingNotificationsModule = nextModule === 'notificaciones' && (!Array.isArray(state.notificaciones) || !state.notificaciones.length);
       if (bootstrappingNotificationsModule) {
         setAdminModuleLoading(nextModule, true);
@@ -4067,21 +4117,7 @@
       if ($('adminCountTalleres')) $('adminCountTalleres').textContent = String(activeTalleres);
       if ($('adminCountReportes')) $('adminCountReportes').textContent = getReportStatusLabel(getReportSelectionState().lastResult && (getReportSelectionState().lastResult.status || getReportSelectionState().lastResult.estado) || 'PDF');
 
-      document.querySelectorAll('.admin-nav-btn').forEach((btn) => {
-        const moduleName = String(btn.dataset.adminModule || '').trim();
-        const isActive = moduleName === state.activeAdminModule;
-        const isLoading = isAdminModuleLoading(moduleName);
-        if (!btn.dataset.defaultText) btn.dataset.defaultText = btn.textContent;
-        btn.classList.toggle('is-active', isActive);
-        btn.classList.toggle('is-loading', isLoading);
-        if (isLoading) {
-          btn.setAttribute('aria-busy', 'true');
-          btn.textContent = btn.dataset.defaultText + ' - Cargando...';
-        } else {
-          btn.removeAttribute('aria-busy');
-          btn.textContent = btn.dataset.defaultText;
-        }
-      });
+      document.querySelectorAll('.admin-nav-btn').forEach((btn) => syncAdminModuleNavButton(btn.dataset.adminModule));
       document.querySelectorAll('.admin-panel').forEach((panel) => {
         panel.classList.toggle('is-active', panel.id === 'admin-panel-' + state.activeAdminModule);
       });
@@ -6333,6 +6369,18 @@
       renderAlumnoDeleteControl();
     }
 
+    function scheduleAdminAlumnosFilterRender() {
+      scheduleUiDebounce('admin-alumnos-filter-render', () => {
+        if (String(state.activeAdminModule || '').trim() !== 'alumnos') return;
+        renderAdminAlumnosModule();
+      }, 50);
+    }
+
+    function setAdminAlumnosFilter(filter) {
+      state.alumnosUi.filter = String(filter || 'activos').trim() || 'activos';
+      scheduleAdminAlumnosFilterRender();
+    }
+
     function bindAdminAlumnosEvents() {
       if ($('adminAlumnosSearch')) $('adminAlumnosSearch').addEventListener('input', (event) => {
         state.alumnosUi.search = event.currentTarget.value;
@@ -6340,31 +6388,25 @@
       });
       if ($('adminAlumnosGroupFilter')) $('adminAlumnosGroupFilter').addEventListener('change', (event) => {
         state.alumnosUi.grupo = event.currentTarget.value;
-        renderAdminAlumnosModule();
+        scheduleAdminAlumnosFilterRender();
       });
       if ($('adminAlumnosFilterAllBtn')) $('adminAlumnosFilterAllBtn').addEventListener('click', () => {
-        state.alumnosUi.filter = 'todos';
-        renderAdminAlumnosModule();
+        setAdminAlumnosFilter('todos');
       });
       if ($('adminAlumnosFilterActiveBtn')) $('adminAlumnosFilterActiveBtn').addEventListener('click', () => {
-        state.alumnosUi.filter = 'activos';
-        renderAdminAlumnosModule();
+        setAdminAlumnosFilter('activos');
       });
       if ($('adminAlumnosFilterPauseBtn')) $('adminAlumnosFilterPauseBtn').addEventListener('click', () => {
-        state.alumnosUi.filter = 'pausa';
-        renderAdminAlumnosModule();
+        setAdminAlumnosFilter('pausa');
       });
       if ($('adminAlumnosFilterInactiveBtn')) $('adminAlumnosFilterInactiveBtn').addEventListener('click', () => {
-        state.alumnosUi.filter = 'inactivos';
-        renderAdminAlumnosModule();
+        setAdminAlumnosFilter('inactivos');
       });
       if ($('adminAlumnosFilterGraduatedBtn')) $('adminAlumnosFilterGraduatedBtn').addEventListener('click', () => {
-        state.alumnosUi.filter = 'egresados';
-        renderAdminAlumnosModule();
+        setAdminAlumnosFilter('egresados');
       });
       if ($('adminAlumnosFilterArchivedBtn')) $('adminAlumnosFilterArchivedBtn').addEventListener('click', () => {
-        state.alumnosUi.filter = 'archivados';
-        renderAdminAlumnosModule();
+        setAdminAlumnosFilter('archivados');
       });
       if ($('adminAlumnoDeleteToggleBtn')) $('adminAlumnoDeleteToggleBtn').addEventListener('click', () => toggleAlumnoDeleteControl());
       if ($('adminAlumnoNewBtn')) $('adminAlumnoNewBtn').addEventListener('click', () => openAlumnoEditor('new'));
@@ -7145,6 +7187,9 @@
       const pulse = pulseReady
         ? buildFacilitadorPulse(facilitador.facilitador_id)
         : { esperadas: '...', entregadas: '...', faltantes: '...', cierresPendientes: '...', alertasAbiertas: '...' };
+      const pulseLoadingHtml = isFacilitadorPulseDataLoading(facilitador.facilitador_id)
+        ? '<div class="admin-alumnos-empty" style="min-height:auto;padding:14px 16px;"><div><strong>Cargando pulso pedag&oacute;gico...</strong><div class="subtle">Estamos cruzando asignaciones activas con planeaciones recientes.</div></div></div>'
+        : '';
       const asignaciones = getFacilitadorAsignaciones(facilitador.facilitador_id);
       const canManage = canManageFacilitadoresCatalog();
       const pinOpen = !!state.facilitadoresUi.pinOpen;
@@ -7174,6 +7219,7 @@
             '<div class="admin-alumnos-readonly"><span>Asignaciones activas</span><strong>' + escapeHtml(String(asignaciones.filter((item) => item.activa && !item.archivado_at).length)) + '</strong></div>',
             '<div class="admin-alumnos-readonly"><span>Estado operativo</span><strong>' + escapeHtml(getFacilitadorStatusLabel(visualStatus)) + '</strong></div>',
           '</div>',
+          pulseLoadingHtml,
           '<div class="admin-facilitadores-kpis">',
             '<div class="admin-facilitadores-kpi"><strong>' + escapeHtml(String(pulse.esperadas)) + '</strong><span>Esperadas</span></div>',
             '<div class="admin-facilitadores-kpi"><strong>' + escapeHtml(String(pulse.entregadas)) + '</strong><span>Entregadas</span></div>',
@@ -7770,26 +7816,34 @@
       if ($('adminFacilitadorPinInput')) $('adminFacilitadorPinInput').value = editor.pin_plano || '';
     }
 
+    function scheduleAdminFacilitadoresFilterRender() {
+      scheduleUiDebounce('admin-facilitadores-filter-render', () => {
+        if (String(state.activeAdminModule || '').trim() !== 'facilitadores') return;
+        renderAdminFacilitadoresModule();
+      }, 50);
+    }
+
+    function setAdminFacilitadoresFilter(filter) {
+      state.facilitadoresUi.filter = String(filter || 'activos').trim() || 'activos';
+      scheduleAdminFacilitadoresFilterRender();
+    }
+
     function bindAdminFacilitadoresEvents() {
       if ($('adminFacilitadoresSearch')) $('adminFacilitadoresSearch').addEventListener('input', (event) => {
         state.facilitadoresUi.search = event.currentTarget.value;
         scheduleUiDebounce('admin-facilitadores-search', () => renderAdminFacilitadoresModule());
       });
       if ($('adminFacilitadoresFilterAllBtn')) $('adminFacilitadoresFilterAllBtn').addEventListener('click', () => {
-        state.facilitadoresUi.filter = 'todos';
-        renderAdminFacilitadoresModule();
+        setAdminFacilitadoresFilter('todos');
       });
       if ($('adminFacilitadoresFilterActiveBtn')) $('adminFacilitadoresFilterActiveBtn').addEventListener('click', () => {
-        state.facilitadoresUi.filter = 'activos';
-        renderAdminFacilitadoresModule();
+        setAdminFacilitadoresFilter('activos');
       });
       if ($('adminFacilitadoresFilterInactiveBtn')) $('adminFacilitadoresFilterInactiveBtn').addEventListener('click', () => {
-        state.facilitadoresUi.filter = 'inactivos';
-        renderAdminFacilitadoresModule();
+        setAdminFacilitadoresFilter('inactivos');
       });
       if ($('adminFacilitadoresFilterArchivedBtn')) $('adminFacilitadoresFilterArchivedBtn').addEventListener('click', () => {
-        state.facilitadoresUi.filter = 'archivados';
-        renderAdminFacilitadoresModule();
+        setAdminFacilitadoresFilter('archivados');
       });
       if ($('adminFacilitadorNewBtn')) $('adminFacilitadorNewBtn').addEventListener('click', () => openFacilitadorEditor('new'));
       if ($('adminFacilitadorCancelBtn')) $('adminFacilitadorCancelBtn').addEventListener('click', () => {
