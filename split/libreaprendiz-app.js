@@ -3,7 +3,7 @@
       bootSnapshot: 'la_v8_boot_snapshot',
       planeacionOutbox: 'la_v8_planeacion_outbox'
     };
-    const APP_CLIENT_VERSION = '20260512-fac-mobile-flow-v3';
+    const APP_CLIENT_VERSION = '20260512-fac-mobile-flow-v4';
     const BOOT_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 60 * 12;
     const FACILITADOR_FEED_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 3;
     const OPEN_PLAN_DETAIL_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 8;
@@ -1371,6 +1371,19 @@
       clearLoadedData();
       clearLoginInputs();
       renderAll();
+    }
+
+    function isInvalidSessionError(err) {
+      return String(err && err.code || '').trim() === 'INVALID_SESSION';
+    }
+
+    function handleInvalidSessionBoundary(err, expectedToken) {
+      const currentSessionToken = String((state.session && state.session.token) || '');
+      const expected = String(expectedToken || '').trim();
+      if (expected && currentSessionToken && currentSessionToken !== expected) return false;
+      clearSessionScopedState();
+      setBanner('Tu sesión expiró o ya no es válida. Vuelve a iniciar sesión.', 'error');
+      return true;
     }
 
     function isPlanBuilderExpanded() {
@@ -2864,9 +2877,11 @@
 
     function scheduleDeferredRestoreRefresh() {
       setRestoreSnapshotSyncing(true);
+      const restoreSessionToken = String((state.session && state.session.token) || '');
       const promise = scheduleAfterPaint(() => refreshAll({ fastFacilitadorBoot: true }), 40)
         .catch((error) => {
           setPlaneacionesRestoreLock(false);
+          if (isInvalidSessionError(error) && handleInvalidSessionBoundary(error, restoreSessionToken)) return;
           setBanner(formatApiError(error), 'error');
         });
       if (state.ui) state.ui.fastPlaneacionesBootPromise = promise;
@@ -3193,15 +3208,18 @@
         try {
           await refreshFacilitadorPlaneacionesFastBoot(options);
           return;
-        } catch (_) {
+        } catch (err) {
           setPlaneacionesRestoreLock(false);
+          if (isInvalidSessionError(err)) throw err;
         }
       }
       if (shouldUseFastAdminDashboardBoot(options)) {
         try {
           await refreshAdminDashboardFastBoot(options);
           return;
-        } catch (_) {}
+        } catch (err) {
+          if (isInvalidSessionError(err)) throw err;
+        }
       }
       const silent = !!(options && options.silent);
       const adminNeedsAlertRows = canUseAdminShell() && ['dashboard', 'planeaciones'].includes(String(state.activeAdminModule || '').trim());
@@ -3247,7 +3265,8 @@
         state.notificaciones = Array.isArray(dashboard && dashboard.notificaciones && dashboard.notificaciones.rows)
           ? dashboard.notificaciones.rows
           : ((!canUseAdminShell() || adminNeedsNotificationRows) ? [] : state.notificaciones);
-      } catch (_) {
+      } catch (err) {
+        if (isInvalidSessionError(err)) throw err;
         const tasks = [];
         if (shouldIncludeCatalogos) tasks.push(refreshCatalogos());
         if (shouldIncludePlaneaciones) tasks.push(refreshPlaneaciones());
@@ -15388,8 +15407,7 @@
             const currentSessionToken = String((state.session && state.session.token) || '');
             const hasNewerSession = currentSessionToken && currentSessionToken !== actionSessionToken;
             if (hasNewerSession) return;
-            clearSessionScopedState();
-            setBanner('Tu sesi\u00f3n expir\u00f3 o ya no es v\u00e1lida. Vuelve a iniciar sesi\u00f3n.', 'error', { anchor: feedbackAnchor });
+            handleInvalidSessionBoundary(err, actionSessionToken);
             return;
           }
           if (showPlanEditorValidationError(err)) return;
