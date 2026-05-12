@@ -2878,12 +2878,12 @@
     function scheduleDeferredRestoreRefresh() {
       setRestoreSnapshotSyncing(true);
       const restoreSessionToken = String((state.session && state.session.token) || '');
-      const promise = scheduleAfterPaint(() => refreshAll({ fastFacilitadorBoot: true }), 40)
-        .catch((error) => {
+      const promise = scheduleAfterPaint(() =>
+        refreshAll({ fastFacilitadorBoot: true }).catch((error) => {
           setPlaneacionesRestoreLock(false);
           if (isInvalidSessionError(error) && handleInvalidSessionBoundary(error, restoreSessionToken)) return;
           setBanner(formatApiError(error), 'error');
-        });
+        }), 40);
       if (state.ui) state.ui.fastPlaneacionesBootPromise = promise;
       promise.finally(() => {
         if (state.ui && state.ui.fastPlaneacionesBootPromise === promise) {
