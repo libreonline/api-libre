@@ -318,6 +318,10 @@
         adminPlaneacionesWarmupDone: false,
         adminNotificationsPrefetchPromise: null,
         adminNotificationsPrefetchDone: false,
+        adminIdleReadQueuePromise: null,
+        adminForegroundReadUntil: 0,
+        adminLastModuleActivatedAt: 0,
+        adminDashboardBootLoading: false,
         notificationEditorExpanded: false,
         notificationFilter: 'activas',
         planeacionesFacilitadorAssignmentFilter: '',
@@ -859,7 +863,54 @@
       return !Array.isArray(state.notificaciones) || state.notificaciones.length === 0;
     }
 
-    function scheduleAdminCatalogPrefetch(delay = 520) {
+    function markAdminForegroundRead(duration = 4500) {
+      if (!canUseAdminShell() || !state.ui) return;
+      const now = Date.now();
+      state.ui.adminLastModuleActivatedAt = now;
+      state.ui.adminForegroundReadUntil = Math.max(
+        Number(state.ui.adminForegroundReadUntil || 0),
+        now + duration
+      );
+    }
+
+    function isAdminForegroundReadActive() {
+      if (!canUseAdminShell() || !state.ui) return false;
+      if (Date.now() < Number(state.ui.adminForegroundReadUntil || 0)) return true;
+      const loading = state.ui.adminModuleLoading || {};
+      return Object.keys(loading).some((key) => loading[key]);
+    }
+
+    function shouldRunAdminIdleWarmup() {
+      return !!(
+        canUseAdminShell() &&
+        state.ui &&
+        String(state.activeAdminModule || '').trim() === 'dashboard' &&
+        !isAdminForegroundReadActive()
+      );
+    }
+
+    function runAdminIdleReadTask(task) {
+      if (!shouldRunAdminIdleWarmup()) return Promise.resolve(false);
+      const previous = state.ui.adminIdleReadQueuePromise || Promise.resolve();
+      let didRun = false;
+      const next = previous
+        .catch(() => null)
+        .then(() => {
+          if (!shouldRunAdminIdleWarmup()) return false;
+          didRun = true;
+          return Promise.resolve(task()).then(() => true);
+        })
+        .catch(() => false);
+      const tracked = next.finally(() => {
+        if (state.ui && state.ui.adminIdleReadQueuePromise === tracked) {
+          state.ui.adminIdleReadQueuePromise = null;
+        }
+      });
+      state.ui.adminIdleReadQueuePromise = tracked;
+      return tracked.then((result) => !!(result && didRun));
+    }
+
+    function scheduleAdminCatalogPrefetch(delay = 2600) {
       if (!canUseAdminShell() || !state.ui) return;
       if (state.ui.adminCatalogPrefetchPromise || state.ui.adminCatalogPrefetchScheduled || state.ui.adminCatalogPrefetchDone) return;
       if (String(state.activeAdminModule || '').trim() !== 'dashboard') return;
@@ -872,12 +923,12 @@
         if (state.ui) state.ui.adminCatalogPrefetchScheduled = false;
         if (!canUseAdminShell() || !state.ui || state.ui.adminCatalogPrefetchPromise) return;
         if (state.ui.adminCatalogPrefetchDone) return;
-        if (String(state.activeAdminModule || '').trim() !== 'dashboard') return;
+        if (!shouldRunAdminIdleWarmup()) return;
         if (!hasAdminCatalogPrefetchWork()) {
           state.ui.adminCatalogPrefetchDone = true;
           return;
         }
-        state.ui.adminCatalogPrefetchPromise = prefetchAdminCatalogsSequentially()
+        state.ui.adminCatalogPrefetchPromise = runAdminIdleReadTask(() => prefetchAdminCatalogsSequentially())
           .finally(() => {
             if (!state.ui) return;
             state.ui.adminCatalogPrefetchPromise = null;
@@ -886,7 +937,7 @@
       }, delay);
     }
 
-    function scheduleAdminNotificationsPrefetch(delay = 1100) {
+    function scheduleAdminNotificationsPrefetch(delay = 3800) {
       if (!canUseAdminShell() || !state.ui) return;
       if (state.ui.adminNotificationsPrefetchPromise || state.ui.adminNotificationsPrefetchDone) return;
       if (String(state.activeAdminModule || '').trim() !== 'dashboard') return;
@@ -897,15 +948,15 @@
       scheduleUiDebounce('admin-notificaciones-prefetch', () => {
         if (!canUseAdminShell() || !state.ui || state.ui.adminNotificationsPrefetchPromise) return;
         if (state.ui.adminNotificationsPrefetchDone) return;
-        if (String(state.activeAdminModule || '').trim() !== 'dashboard') return;
+        if (!shouldRunAdminIdleWarmup()) return;
         if (!hasAdminNotificationsPrefetchWork()) {
           state.ui.adminNotificationsPrefetchDone = true;
           return;
         }
-        state.ui.adminNotificationsPrefetchPromise = scheduleAfterPaint(
+        state.ui.adminNotificationsPrefetchPromise = runAdminIdleReadTask(() => scheduleAfterPaint(
           () => refreshNotificaciones({ force: true, limit: 100 }),
           140
-        )
+        ))
           .then(() => {
             if (String(state.activeAdminModule || '').trim() === 'dashboard') {
               renderAdminShell();
@@ -929,28 +980,33 @@
       return true;
     }
 
-    function scheduleAdminPlaneacionesWarmup(delay = 1500) {
+    function scheduleAdminPlaneacionesWarmup(delay = 3200) {
       if (!canUseAdminShell() || !state.ui) return;
       if (state.ui.adminPlaneacionesWarmupPromise || !hasAdminPlaneacionesWarmupWork()) return;
       if (String(state.activeAdminModule || '').trim() !== 'dashboard') return;
       scheduleUiDebounce('admin-planeaciones-warmup', () => {
         if (!canUseAdminShell() || !state.ui || state.ui.adminPlaneacionesWarmupPromise) return;
         if (!hasAdminPlaneacionesWarmupWork()) return;
-        if (String(state.activeAdminModule || '').trim() !== 'dashboard') return;
-        state.ui.adminPlaneacionesWarmupPromise = warmAdminPlaneacionesList()
+        if (!shouldRunAdminIdleWarmup()) return;
+        let didRunWarmup = false;
+        state.ui.adminPlaneacionesWarmupPromise = runAdminIdleReadTask(() => {
+          didRunWarmup = true;
+          return warmAdminPlaneacionesList();
+        })
           .catch(() => null)
           .finally(() => {
             if (!state.ui) return;
             state.ui.adminPlaneacionesWarmupPromise = null;
-            state.ui.adminPlaneacionesWarmupDone = true;
+            if (didRunWarmup) state.ui.adminPlaneacionesWarmupDone = true;
           });
       }, delay);
     }
 
     function scheduleAdminDashboardIdleWork() {
-      scheduleAdminCatalogPrefetch(900);
-      scheduleAdminPlaneacionesWarmup(1450);
-      scheduleAdminNotificationsPrefetch(1180);
+      if (state.ui && state.ui.adminDashboardBootLoading) return;
+      scheduleAdminCatalogPrefetch(2600);
+      scheduleAdminPlaneacionesWarmup(3200);
+      scheduleAdminNotificationsPrefetch(3800);
     }
 
     async function prefetchAdminCatalogsSequentially() {
@@ -1260,6 +1316,10 @@
         state.ui.adminNotificationsPrefetchDone = false;
         state.ui.adminPlaneacionesWarmupPromise = null;
         state.ui.adminPlaneacionesWarmupDone = false;
+        state.ui.adminIdleReadQueuePromise = null;
+        state.ui.adminForegroundReadUntil = 0;
+        state.ui.adminLastModuleActivatedAt = 0;
+        state.ui.adminDashboardBootLoading = false;
         state.ui.planeacionOutboxProcessing = false;
         state.ui.pendingPlanSaveTransactions = {};
         state.ui.planDetailPromises = {};
@@ -3074,35 +3134,33 @@
 
     async function refreshAdminDashboardFastBoot(options = {}) {
       ensureLoggedIn();
-      const dashboard = await api('getDashboard', Object.assign({}, buildPlaneacionesPayload(), {
-        alert_limit: 20,
-        notification_limit: 20,
-        include_catalogos: false,
-        include_planeaciones: false,
-        include_notificaciones: false,
-        include_detail: false
-      }));
-      state.dashboardStats = dashboard && dashboard.stats ? dashboard.stats : {};
-      state.alertas = Array.isArray(dashboard && dashboard.alertas && dashboard.alertas.rows)
-        ? dashboard.alertas.rows
-        : [];
-      state.notificaciones = [];
-      renderSession();
-      renderStats();
-      renderAdminShell();
-      renderAlertas();
-      renderInstitutionalNotices();
-      syncRoleUi();
+      if (state.ui) state.ui.adminDashboardBootLoading = true;
+      try {
+        const dashboard = await api('getDashboard', Object.assign({}, buildPlaneacionesPayload(), {
+          alert_limit: 20,
+          notification_limit: 20,
+          include_catalogos: false,
+          include_planeaciones: false,
+          include_notificaciones: false,
+          include_detail: false
+        }));
+        state.dashboardStats = dashboard && dashboard.stats ? dashboard.stats : {};
+        state.alertas = Array.isArray(dashboard && dashboard.alertas && dashboard.alertas.rows)
+          ? dashboard.alertas.rows
+          : [];
+        state.notificaciones = [];
+        renderSession();
+        renderStats();
+        renderAdminShell();
+        renderAlertas();
+        renderInstitutionalNotices();
+        syncRoleUi();
+      } finally {
+        if (state.ui) state.ui.adminDashboardBootLoading = false;
+      }
       scheduleAdminCatalogPrefetch();
       scheduleAdminPlaneacionesWarmup();
       scheduleAdminNotificationsPrefetch();
-
-      const deferredPromise = Promise.resolve();
-
-      if (state.ui) state.ui.fastAdminBootPromise = deferredPromise;
-      deferredPromise.finally(() => {
-        if (state.ui) state.ui.fastAdminBootPromise = null;
-      });
     }
 
     async function refreshAll(options = {}) {
@@ -3963,6 +4021,11 @@
       bindWindowActionGroup('admin');
       const nextModule = moduleName || 'dashboard';
       const previousModule = state.activeAdminModule;
+      if (nextModule !== 'dashboard') {
+        markAdminForegroundRead();
+      } else if (state.ui) {
+        state.ui.adminForegroundReadUntil = 0;
+      }
       if (nextModule !== 'notificaciones' && state.ui && state.ui.notificationEditorExpanded) {
         resetNotificationEditor();
       }
