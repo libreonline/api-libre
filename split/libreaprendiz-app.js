@@ -3,7 +3,7 @@
       bootSnapshot: 'la_v8_boot_snapshot',
       planeacionOutbox: 'la_v8_planeacion_outbox'
     };
-    const APP_CLIENT_VERSION = '20260512-fac-mobile-flow-v2';
+    const APP_CLIENT_VERSION = '20260512-fac-mobile-flow-v3';
     const BOOT_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 60 * 12;
     const FACILITADOR_FEED_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 3;
     const OPEN_PLAN_DETAIL_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 8;
@@ -19,6 +19,7 @@
     // localStorage. 5 cubre la mayoría de los casos del facilitador.
     const PREFETCHED_DETAIL_SNAPSHOT_LIMIT = 5;
     const LOGIN_PRELOAD_CATALOG_BLOCKS = ['materias', 'semanas', 'grupos'];
+    const CATALOG_BLOCKS_REQUIRE_ROWS = ['grupos', 'materias', 'semanas'];
 
     function createEmptyAlumnoEditorState() {
       return {
@@ -753,6 +754,14 @@
       state.catalogosMeta.loadedBlocks = Array.from(seen);
     }
 
+    function catalogBlockRequiresRows(blockKey) {
+      return CATALOG_BLOCKS_REQUIRE_ROWS.includes(String(blockKey || '').trim());
+    }
+
+    function catalogBlockValueHasRows(blockKey, value) {
+      return !catalogBlockRequiresRows(blockKey) || (Array.isArray(value) && value.length > 0);
+    }
+
     function mergeCatalogosPayload(partial, requestedBlocks) {
       if (!partial || typeof partial !== 'object') return;
       const merged = Object.assign(createEmptyCatalogos(), state.catalogos || {});
@@ -777,10 +786,14 @@
     }
 
     function isCatalogBlockLoaded(blockKey) {
+      const key = String(blockKey || '').trim();
+      if (catalogBlockRequiresRows(key) && !catalogBlockValueHasRows(key, state.catalogos && state.catalogos[key])) {
+        return false;
+      }
       return !!(
         state.catalogosMeta &&
         Array.isArray(state.catalogosMeta.loadedBlocks) &&
-        state.catalogosMeta.loadedBlocks.includes(String(blockKey || '').trim())
+        state.catalogosMeta.loadedBlocks.includes(key)
       );
     }
 
@@ -1728,7 +1741,9 @@
         ? snapshot.catalogos
         : null;
       if (!catalogos) return false;
-      const blocks = LOGIN_PRELOAD_CATALOG_BLOCKS.filter((block) => Array.isArray(catalogos[block]));
+      const blocks = LOGIN_PRELOAD_CATALOG_BLOCKS.filter((block) =>
+        Array.isArray(catalogos[block]) && catalogBlockValueHasRows(block, catalogos[block])
+      );
       if (!blocks.length) return false;
       mergeCatalogosPayload(catalogos, blocks);
       return true;
@@ -1761,9 +1776,11 @@
     function buildBootSnapshotCatalogos(blocks) {
       const normalized = normalizeCatalogBlocks(blocks);
       return normalized.reduce((acc, block) => {
-        acc[block] = Array.isArray(state.catalogos && state.catalogos[block])
+        const rows = Array.isArray(state.catalogos && state.catalogos[block])
           ? state.catalogos[block]
           : [];
+        if (catalogBlockRequiresRows(block) && !rows.length) return acc;
+        acc[block] = rows;
         return acc;
       }, {});
     }
@@ -2037,7 +2054,12 @@
         ? snapshot.planeaciones.filter((plan) => !isPlaneacionPendingCreation(plan))
         : [];
       if (isBootSnapshotCatalogosCompatible(snapshot) && snapshot.catalogos && typeof snapshot.catalogos === 'object') {
-        mergeCatalogosPayload(snapshot.catalogos, Object.keys(snapshot.catalogos));
+        const reusableCatalogBlocks = Object.keys(snapshot.catalogos).filter((block) =>
+          catalogBlockValueHasRows(block, snapshot.catalogos[block])
+        );
+        if (reusableCatalogBlocks.length) {
+          mergeCatalogosPayload(snapshot.catalogos, reusableCatalogBlocks);
+        }
       }
       if (snapshot.dashboardStats && typeof snapshot.dashboardStats === 'object') {
         state.dashboardStats = Object.assign({}, state.dashboardStats || {}, snapshot.dashboardStats);
