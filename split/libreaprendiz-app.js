@@ -812,7 +812,7 @@
     function getPlaneacionesEditorCatalogBlocks() {
       return canUseAdminShell()
         ? ['alumnos', 'facilitadores', 'grupos', 'materias', 'submaterias', 'semanas', 'talleres', 'alumno_talleres']
-        : ['alumnos', 'facilitador_asignaciones', 'submaterias', 'talleres', 'alumno_talleres'];
+        : ['alumnos', 'facilitador_asignaciones', 'grupos', 'materias', 'submaterias', 'semanas', 'talleres', 'alumno_talleres'];
     }
 
     function getCatalogBlocksForModuleWithScope(moduleName, options = {}) {
