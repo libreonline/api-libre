@@ -1960,14 +1960,17 @@
           ).trim(),
           FACILITADOR_FEED_SNAPSHOT_MAX_AGE_MS
         );
+      const reusableSnapshotPlaneaciones = canReusePlaneacionesSnapshot && Array.isArray(snapshot.planeaciones)
+        ? snapshot.planeaciones.filter((plan) => !isPlaneacionPendingCreation(plan))
+        : [];
       if (snapshot.catalogos && typeof snapshot.catalogos === 'object') {
         mergeCatalogosPayload(snapshot.catalogos, Object.keys(snapshot.catalogos));
       }
       if (snapshot.dashboardStats && typeof snapshot.dashboardStats === 'object') {
         state.dashboardStats = Object.assign({}, state.dashboardStats || {}, snapshot.dashboardStats);
       }
-      if (canReusePlaneacionesSnapshot && Array.isArray(snapshot.planeaciones)) {
-        state.planeaciones = snapshot.planeaciones.filter((plan) => !isPlaneacionPendingCreation(plan));
+      if (reusableSnapshotPlaneaciones.length) {
+        state.planeaciones = reusableSnapshotPlaneaciones;
       }
       if (Array.isArray(snapshot.alertas)) {
         state.alertas = snapshot.alertas;
@@ -2001,7 +2004,7 @@
       // sigue existiendo en la lista, no hay versión más nueva en backend, y el
       // detalle persistido sigue dentro del TTL. No restaura drafts locales.
       if (
-        canReusePlaneacionesSnapshot &&
+        reusableSnapshotPlaneaciones.length &&
         Array.isArray(snapshot.prefetchedOpenPlans) &&
         snapshot.prefetchedOpenPlans.length
       ) {
@@ -2037,7 +2040,7 @@
         });
       }
       if (
-        canReusePlaneacionesSnapshot &&
+        reusableSnapshotPlaneaciones.length &&
         snapshot.openPlanId &&
         Array.isArray(snapshot.planeaciones) &&
         snapshot.planeaciones.some(
@@ -2057,7 +2060,7 @@
       ) {
         state.openPlanDraft = snapshot.openPlanDraft;
       }
-      if (canReusePlaneacionesSnapshot && snapshot.planeacionesMeta && state.ui) {
+      if (reusableSnapshotPlaneaciones.length && snapshot.planeacionesMeta && state.ui) {
         state.ui.planeacionesLoaded = !!snapshot.planeacionesMeta.loaded;
         state.ui.planeacionesHasMore = !!snapshot.planeacionesMeta.hasMore;
         state.ui.planeacionesOffset = Number(snapshot.planeacionesMeta.offset || state.planeaciones.length || 0);
@@ -2914,7 +2917,7 @@
         shouldReuseFacilitadorFeedSnapshot('planeaciones') &&
         !hasActivePlaneacionesFilters() &&
         Array.isArray(state.planeaciones) &&
-        (!!state.planeaciones.length || !!(state.ui && state.ui.planeacionesLoaded));
+        state.planeaciones.length > 0;
       const canReuseStatsSnapshot =
         canReusePlaneacionesSnapshot &&
         state.dashboardStats &&
