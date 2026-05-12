@@ -3,7 +3,7 @@
       bootSnapshot: 'la_v8_boot_snapshot',
       planeacionOutbox: 'la_v8_planeacion_outbox'
     };
-    const APP_CLIENT_VERSION = '20260512-fac-editor-cache-repair-v1';
+    const APP_CLIENT_VERSION = '20260512-fac-mobile-flow-v1';
     const BOOT_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 60 * 12;
     const FACILITADOR_FEED_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 3;
     const OPEN_PLAN_DETAIL_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 8;
@@ -1366,14 +1366,16 @@
 
     function togglePlanBuilder(forceValue) {
       const next = typeof forceValue === 'boolean' ? forceValue : !isPlanBuilderExpanded();
+      if (state.ui) state.ui.planBuilderExpanded = next;
       if (next) {
         closeOpenPlan();
         renderPlaneacionesList();
+        renderPlanBuilderVisibility();
         if (state.planEditor.mode === 'create' && currentViewNeedsCatalogos()) {
           ensurePlaneacionesCatalogosAvailable({ render: true }).catch(() => {});
         }
+        return;
       }
-      if (state.ui) state.ui.planBuilderExpanded = next;
       renderPlanBuilderVisibility();
     }
 
@@ -2352,6 +2354,14 @@
       document.body.classList.toggle('auth-mode', !isLoggedIn);
     }
 
+    function isCompactMobileViewport() {
+      return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 720px)').matches;
+    }
+
+    function prefersReducedData() {
+      return !!(typeof navigator !== 'undefined' && navigator.connection && navigator.connection.saveData);
+    }
+
     function saveSession(session) {
       state.session = session;
       if (session) {
@@ -2946,6 +2956,7 @@
       if (state.ui && state.ui.planeacionesCatalogosPromise) return;
       if (state.ui && state.ui.editorCatalogosWarmupScheduled) return;
       if (state.ui) state.ui.editorCatalogosWarmupScheduled = true;
+      const delayMs = isCompactMobileViewport() ? 80 : 360;
       scheduleAfterPaint(function () {
         window.setTimeout(function () {
           if (getCurrentRole() !== 'facilitador') return;
@@ -2956,7 +2967,7 @@
             .finally(function () {
               if (state.ui) state.ui.editorCatalogosWarmupScheduled = false;
             });
-        }, 600);
+        }, delayMs);
         return null;
       });
     }
@@ -3078,6 +3089,7 @@
         }
         renderBaseSelects({ planeaciones: true });
         renderPlanBuilderVisibility();
+        scheduleFacilitadorEditorCatalogosWarmup('boot-after-surface');
 
         // 2. Alertas (silencioso, sin banner)
         if (!shouldReuseAlertas) {
@@ -3145,7 +3157,6 @@
         if (state.ui) state.ui.fastPlaneacionesBootPromise = null;
       });
       setPlaneacionesRestoreLock(false);
-      scheduleFacilitadorEditorCatalogosWarmup('boot');
     }
 
     async function refreshAdminDashboardFastBoot(options = {}) {
@@ -3323,16 +3334,21 @@
     function getPlaneacionDetailPrefetchLimit(options = {}) {
       const requestedLimit = Number(options.limit || 0);
       if (requestedLimit > 0) return requestedLimit;
+      if (!canUseAdminShell() && prefersReducedData()) return 2;
+      if (!canUseAdminShell() && isCompactMobileViewport()) return 4;
       return canUseAdminShell() ? ADMIN_PLAN_DETAIL_WARMUP_LIMIT : OPEN_PLAN_DETAIL_PREFETCH_LIMIT;
     }
 
     function getPlaneacionDetailPrefetchConcurrency(options = {}) {
       const requestedConcurrency = Number(options.concurrency || 0);
       if (requestedConcurrency > 0) return requestedConcurrency;
+      if (!canUseAdminShell() && (isCompactMobileViewport() || prefersReducedData())) return 1;
       return canUseAdminShell() ? ADMIN_PLAN_DETAIL_WARMUP_CONCURRENCY : OPEN_PLAN_DETAIL_PREFETCH_CONCURRENCY;
     }
 
     function getPlaneacionDetailPrefetchDelayMs() {
+      if (!canUseAdminShell() && prefersReducedData()) return 1000;
+      if (!canUseAdminShell() && isCompactMobileViewport()) return 220;
       return canUseAdminShell() ? ADMIN_PLAN_DETAIL_WARMUP_DELAY_MS : OPEN_PLAN_DETAIL_PREFETCH_DELAY_MS;
     }
 
@@ -3851,6 +3867,8 @@
       const facilitatorMode = role === 'facilitador';
       const adminMode = canUseAdminShell();
       const canViewReportes = canUseReportes();
+      document.body.classList.toggle('role-facilitador', facilitatorMode);
+      document.body.classList.toggle('role-admin', adminMode);
       if (tabs) tabs.hidden = facilitatorMode || adminMode;
       if (adminShell) adminShell.style.display = adminMode ? 'grid' : 'none';
       if (adminPlaneacionesShell) adminPlaneacionesShell.classList.toggle('is-active', !adminMode || state.activeAdminModule === 'planeaciones');

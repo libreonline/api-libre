@@ -5671,6 +5671,109 @@
         min-height: 26px;
       }
     }
+
+    @media (max-width: 720px) {
+      body.role-facilitador:not(.auth-mode) {
+        padding: 8px 10px;
+      }
+
+      body.role-facilitador:not(.auth-mode) .page::before {
+        height: 5px;
+        margin-bottom: 8px;
+      }
+
+      body.role-facilitador:not(.auth-mode) #statusBanner.info,
+      body.role-facilitador:not(.auth-mode) #statusBanner.success {
+        margin-bottom: 8px;
+        padding: 8px 10px;
+        border-radius: 14px;
+        font-size: 0.88rem;
+        line-height: 1.28;
+      }
+
+      body.role-facilitador:not(.auth-mode) .workspace-session-bar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 10px;
+        padding: 8px 10px;
+        border-radius: 14px;
+      }
+
+      body.role-facilitador:not(.auth-mode) .workspace-session-copy {
+        gap: 0;
+        min-width: 0;
+      }
+
+      body.role-facilitador:not(.auth-mode) .workspace-session-copy strong {
+        font-size: 0.98rem;
+        line-height: 1.15;
+      }
+
+      body.role-facilitador:not(.auth-mode) .workspace-session-meta .mini {
+        font-size: 0.76rem;
+      }
+
+      body.role-facilitador:not(.auth-mode) #workspaceLogoutBtn {
+        min-width: 0;
+        width: auto;
+        min-height: 40px;
+        padding: 8px 12px;
+        font-size: 0.88rem !important;
+      }
+
+      body.role-facilitador:not(.auth-mode) .card {
+        padding: 14px !important;
+        border-radius: 18px !important;
+      }
+
+      body.role-facilitador:not(.auth-mode) .plan-builder-launch-btn {
+        width: 100%;
+        min-width: 0;
+      }
+
+      body.role-facilitador:not(.auth-mode) .planeaciones-shell-card .card-head {
+        gap: 8px;
+      }
+
+      body.role-facilitador:not(.auth-mode) .planeaciones-shell-card h2 {
+        margin-bottom: 4px;
+      }
+
+      body.role-facilitador:not(.auth-mode) #planeacionesSectionCopy {
+        max-width: none;
+        font-size: 0.92rem;
+        line-height: 1.35;
+      }
+
+      body.role-facilitador:not(.auth-mode) .planeaciones-filter-bar {
+        gap: 6px;
+      }
+
+      body.role-facilitador:not(.auth-mode) .planeaciones-filter-bar select,
+      body.role-facilitador:not(.auth-mode) .planeaciones-filter-bar input,
+      body.role-facilitador:not(.auth-mode) .planeaciones-filter-bar button {
+        min-height: 44px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+      }
+
+      body.role-facilitador:not(.auth-mode) #planGruposChecklist.checklist-groups .check-item,
+      body.role-facilitador:not(.auth-mode) #planAlumnosChecklist .check-item,
+      body.role-facilitador:not(.auth-mode) .plan-open-students .check-item {
+        min-height: 42px;
+        padding: 9px 10px;
+      }
+
+      body.role-facilitador:not(.auth-mode) #planGruposChecklist input[type="checkbox"],
+      body.role-facilitador:not(.auth-mode) #planAlumnosChecklist input[type="checkbox"],
+      body.role-facilitador:not(.auth-mode) .plan-open-students input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+        accent-color: var(--la-cyan);
+      }
+    }
   </style>
 </head>
 <body>
@@ -6479,7 +6582,7 @@
     </div>
   </div>
 
-<script defer src="./libreaprendiz-app.js?v=20260512-fac-editor-cache-repair-v1"></script>
+<script defer src="./libreaprendiz-app.js?v=20260512-fac-mobile-flow-v1"></script>
 </body>
 </html>
 
