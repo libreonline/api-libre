@@ -2393,7 +2393,12 @@
     }
 
     function canResetTestEnvironment() {
-      return getCurrentRole() === 'admin';
+      return getCurrentRole() === 'admin' && !isProductionBackendEnvironment();
+    }
+
+    function isProductionBackendEnvironment() {
+      const normalize = (value) => String(value || '').trim().replace(/\/+$/, '');
+      return normalize(requireBackendUrl()) === normalize(PRODUCTION_BACKEND_URL);
     }
 
     function ensureCanUseReportes() {
@@ -4530,16 +4535,54 @@
       };
     }
 
+    function getNotificationAudienceSummary(notification) {
+      const visiblePara = String(notification && notification.visible_para || 'todos').trim();
+      const activeFacilitadores = (state.catalogos.facilitadores || []).filter((item) => isTruthyValue(item.activo));
+      if (visiblePara === 'especificos') {
+        const ids = getNotificationAudienceIds(notification);
+        return {
+          label: ids.length + ' facilitador(es) seleccionado(s)',
+          detail: ids.map((id) => {
+            const row = activeFacilitadores.find((item) => item.facilitador_id === id);
+            return row ? (row.nombre_mostrado || row.nombre_completo || row.facilitador_id) : id;
+          }).filter(Boolean).slice(0, 8).join(', ')
+        };
+      }
+      return {
+        label: activeFacilitadores.length
+          ? activeFacilitadores.length + ' facilitador(es) activo(s)'
+          : 'todos los facilitadores activos disponibles',
+        detail: ''
+      };
+    }
+
+    function confirmNotificationPublish(notification) {
+      const audience = getNotificationAudienceSummary(notification || {});
+      const title = String(notification && notification.titulo || '').trim() || 'Sin titulo';
+      const vigencia = formatNotificationVigencia(notification || {});
+      return window.confirm([
+        'Vas a publicar esta notificacion.',
+        '',
+        'Titulo: ' + title,
+        'Audiencia: ' + audience.label + (audience.detail ? ' (' + audience.detail + ')' : ''),
+        'Vigencia: ' + vigencia,
+        '',
+        'Confirma solo si la audiencia es correcta.'
+      ].join('\n'));
+    }
+
     async function saveNotificationEditor(button, targetStatus) {
       ensureLoggedIn();
       const wantsPublish = targetStatus === 'publicada';
       const isEditing = !!(state.notificationEditor && state.notificationEditor.notificacion_id);
       await handleAction(wantsPublish ? 'publicarNotificacion' : 'guardarNotificacion', async () => {
         if (wantsPublish) {
+          const publishPayload = buildNotificationPayload(state.notificationEditor.notificacion_id ? (state.notificationEditor.estatus || 'borrador') : 'borrador');
+          if (!confirmNotificationPublish(publishPayload)) return;
           const saveStatus = state.notificationEditor.notificacion_id
             ? (state.notificationEditor.estatus || 'borrador')
             : 'borrador';
-          const saved = await api('guardarNotificacion', buildNotificationPayload(saveStatus));
+          const saved = await api('guardarNotificacion', publishPayload);
           const notificationId = (saved && saved.notificacion_id) || state.notificationEditor.notificacion_id || '';
           if (!notificationId) throw new Error('No se pudo preparar la notificaci\u00f3n para publicar.');
           await api('publicarNotificacion', {
@@ -4572,6 +4615,10 @@
     async function notificationAction(button, notificationId, action) {
       ensureLoggedIn();
       await handleAction(action, async () => {
+        if (action === 'publicarNotificacion') {
+          const notification = (state.notificaciones || []).find((item) => item.notificacion_id === notificationId);
+          if (!confirmNotificationPublish(notification || { notificacion_id: notificationId })) return;
+        }
         await api(action, { notificacion_id: notificationId, request_id: uid('NOTIA') });
         if (state.notificationEditor.notificacion_id === notificationId) {
           resetNotificationEditor();
@@ -14601,6 +14648,7 @@
       const categories = getMaintenanceCategories();
       const lastReset = ui.lastReset || null;
       const canReset = canResetTestEnvironment();
+      const productionBackend = isProductionBackendEnvironment();
       const reportFiles = ui.preview && ui.preview.report_files ? ui.preview.report_files : { pdf_files: 0, doc_files: 0 };
       return [
         '<div class="admin-config-module">',
@@ -14638,9 +14686,9 @@
                 '<button id="maintenanceAuditBtn" class="btn-ghost" type="button">Ejecutar auditor&iacute;a</button>',
                 canReset
                   ? '<button id="maintenanceResetBtn" class="btn-primary" type="button">Resetear entorno de pruebas</button>'
-                  : '<button class="btn-primary" type="button" disabled>Reset solo para admin</button>',
+                  : '<button class="btn-primary" type="button" disabled>' + (productionBackend ? 'Reset bloqueado en producci&oacute;n' : 'Reset solo para admin') + '</button>',
               '</div>',
-              '<div class="admin-config-danger"><strong>Protecci&oacute;n activa:</strong> este reset solo limpia datos operativos. Cat&aacute;logos maestros, semanas, per&iacute;odos, facilitadores, alumnos, materias, submaterias y configuraci&oacute;n base se conservan.</div>',
+              '<div class="admin-config-danger"><strong>Protecci&oacute;n activa:</strong> ' + (productionBackend ? 'las acciones destructivas est&aacute;n bloqueadas en producci&oacute;n.' : 'este reset solo limpia datos operativos. Cat&aacute;logos maestros, semanas, per&iacute;odos, facilitadores, alumnos, materias, submaterias y configuraci&oacute;n base se conservan.') + '</div>',
             '</section>',
             '<section class="admin-config-card">',
               '<div class="admin-config-card-head"><div><h4>Vista previa</h4><div class="subtle">Conteo por hoja antes de ejecutar el reset.</div></div></div>',
@@ -14724,6 +14772,10 @@
           '\u00bfDeseas continuar?'
         ].join('\n');
         if (!window.confirm(confirmation)) return;
+        const typedConfirmation = window.prompt('Para ejecutar escribe exactamente: RESET ENTORNO DE PRUEBAS');
+        if (String(typedConfirmation || '').trim() !== 'RESET ENTORNO DE PRUEBAS') {
+          throw new Error('Confirmacion textual incorrecta. No se ejecuto el reset.');
+        }
         const data = await api('resetEntornoPruebas', {
           categories: ui.selectedCategories,
           trash_report_files: !!ui.trashReportFiles,
