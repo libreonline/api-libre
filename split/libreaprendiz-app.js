@@ -3,7 +3,7 @@
       bootSnapshot: 'la_v8_boot_snapshot',
       planeacionOutbox: 'la_v8_planeacion_outbox'
     };
-    const APP_CLIENT_VERSION = '20260512-fac-mobile-flow-v1';
+    const APP_CLIENT_VERSION = '20260512-fac-mobile-flow-v2';
     const BOOT_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 60 * 12;
     const FACILITADOR_FEED_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 3;
     const OPEN_PLAN_DETAIL_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 8;
@@ -2945,33 +2945,6 @@
       return promise;
     }
 
-    // Precarga silenciosa de catalogos del editor (alumnos, submaterias, talleres,
-    // alumno_talleres) despues del primer paint del facilitador. Objetivo: que
-    // "Crear nueva planeacion" abra con campos ya listos sin mostrar el pill
-    // "Preparando opciones...". No bloquea boot/login ni genera banners.
-    function scheduleFacilitadorEditorCatalogosWarmup(reason) {
-      if (getCurrentRole() !== 'facilitador') return;
-      if (canUseAdminShell()) return;
-      if (!currentViewNeedsCatalogos()) return;
-      if (state.ui && state.ui.planeacionesCatalogosPromise) return;
-      if (state.ui && state.ui.editorCatalogosWarmupScheduled) return;
-      if (state.ui) state.ui.editorCatalogosWarmupScheduled = true;
-      const delayMs = isCompactMobileViewport() ? 80 : 360;
-      scheduleAfterPaint(function () {
-        window.setTimeout(function () {
-          if (getCurrentRole() !== 'facilitador') return;
-          if (canUseAdminShell()) return;
-          if (!currentViewNeedsCatalogos()) return;
-          ensurePlaneacionesCatalogosAvailable({ render: false, scope: 'editor' })
-            .catch(function () {})
-            .finally(function () {
-              if (state.ui) state.ui.editorCatalogosWarmupScheduled = false;
-            });
-        }, delayMs);
-        return null;
-      });
-    }
-
     async function ensureTallerMembershipCatalogosAvailable(options = {}) {
       const blocks = getMissingCatalogBlocks(['alumnos', 'grupos']);
       if (!blocks.length) return state.catalogos;
@@ -3080,16 +3053,16 @@
 
       // === FASE B: hidratación en background sin bloquear lista ===
       const deferredPromise = scheduleAfterPaint(async () => {
-        // 1. Catálogos de superficie (necesarios para selects/editor de planeación)
-        if (shouldRequestSurfaceCatalogs) {
+        // 1. Catálogos completos del editor en una promesa compartida.
+        const missingEditorCatalogBlocks = getMissingCatalogBlocks(getPlaneacionesEditorCatalogBlocks());
+        if (shouldRequestSurfaceCatalogs || missingEditorCatalogBlocks.length) {
           try {
-            await refreshCatalogos({ blocks: missingSurfaceCatalogBlocks });
+            await ensurePlaneacionesCatalogosAvailable({ render: false, scope: 'editor' });
             renderFacilitadorSuplenciasActivasHost();
           } catch (_) {}
         }
         renderBaseSelects({ planeaciones: true });
         renderPlanBuilderVisibility();
-        scheduleFacilitadorEditorCatalogosWarmup('boot-after-surface');
 
         // 2. Alertas (silencioso, sin banner)
         if (!shouldReuseAlertas) {
