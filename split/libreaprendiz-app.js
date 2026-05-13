@@ -3,7 +3,7 @@
       bootSnapshot: 'la_v8_boot_snapshot',
       planeacionOutbox: 'la_v8_planeacion_outbox'
     };
-    const APP_CLIENT_VERSION = '20260512-fac-session-boundary-v2';
+    const APP_CLIENT_VERSION = '20260512-fac-multigroup-consistency-v1';
     const BOOT_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 60 * 12;
     const FACILITADOR_FEED_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 3;
     const OPEN_PLAN_DETAIL_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 8;

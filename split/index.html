@@ -5862,6 +5862,143 @@
         accent-color: var(--la-cyan);
       }
     }
+
+    /* Facilitador Multigrupo Consistency V1
+       Mantiene la logica actual, pero aplana el editor para evitar card dentro de card. */
+    body.role-facilitador:not(.auth-mode) .plan-card .plan-open-editor {
+      gap: 12px;
+      margin-top: 12px;
+      padding-top: 12px;
+    }
+
+    body.role-facilitador:not(.auth-mode) .plan-card .plan-open-editor .group-block,
+    body.role-facilitador:not(.auth-mode) .plan-builder-shell .plan-editor-student-panel {
+      padding: 0 !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+
+    body.role-facilitador:not(.auth-mode) .plan-card .group-block-head,
+    body.role-facilitador:not(.auth-mode) .plan-builder-shell .group-block-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 8px;
+      padding: 9px 11px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.045);
+    }
+
+    body.role-facilitador:not(.auth-mode) .plan-card .group-block-head > div:first-child,
+    body.role-facilitador:not(.auth-mode) .plan-builder-shell .group-block-head > div:first-child {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    body.role-facilitador:not(.auth-mode) .plan-card .group-block-head strong,
+    body.role-facilitador:not(.auth-mode) .plan-builder-shell .group-block-head strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    body.role-facilitador:not(.auth-mode) .plan-card .plan-open-students-flat,
+    body.role-facilitador:not(.auth-mode) .plan-builder-shell .plan-editor-students-list {
+      max-height: none !important;
+      overflow: visible !important;
+      padding: 0 !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+    }
+
+    body.role-facilitador:not(.auth-mode) .plan-card .plan-open-students-flat .check-item,
+    body.role-facilitador:not(.auth-mode) .plan-builder-shell .plan-editor-students-list .check-item {
+      min-height: 38px;
+      border-radius: 11px;
+      background: rgba(255,255,255,0.055);
+    }
+
+    body.role-facilitador:not(.auth-mode) .plan-open-editor-group.is-multigroup-compact .plan-multigroup-student-row.is-collapsed {
+      padding: 0 !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+    }
+
+    body.role-facilitador:not(.auth-mode) .plan-multigroup-student-summary {
+      min-height: 42px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+    }
+
+    body.role-facilitador:not(.auth-mode) .plan-multigroup-student-summary .plan-multigroup-edit-btn {
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 720px) {
+      body.role-facilitador:not(.auth-mode) .plan-card .plan-open-editor {
+        gap: 10px;
+      }
+
+      body.role-facilitador:not(.auth-mode) .plan-card .group-block-head,
+      body.role-facilitador:not(.auth-mode) .plan-builder-shell .group-block-head {
+        grid-template-columns: 1fr;
+        gap: 7px;
+        padding: 9px 10px;
+      }
+
+      body.role-facilitador:not(.auth-mode) .plan-card .group-block-head .actions.compact,
+      body.role-facilitador:not(.auth-mode) .plan-builder-shell .group-block-head .actions.compact {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        width: 100%;
+      }
+
+      body.role-facilitador:not(.auth-mode) .plan-card .group-block-head .actions.compact > .btn-ghost,
+      body.role-facilitador:not(.auth-mode) .plan-builder-shell .group-block-head .actions.compact > .btn-ghost {
+        min-width: 0;
+        min-height: 38px;
+        padding: 8px 10px;
+      }
+
+      body.role-facilitador:not(.auth-mode) .plan-card .plan-open-students-flat,
+      body.role-facilitador:not(.auth-mode) .plan-builder-shell .plan-editor-students-list {
+        grid-template-columns: 1fr !important;
+        gap: 7px;
+      }
+
+      body.role-facilitador:not(.auth-mode) .plan-multigroup-switcher-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+        gap: 7px;
+      }
+
+      body.role-facilitador:not(.auth-mode) .plan-multigroup-switch {
+        width: auto;
+        min-width: 0;
+        min-height: 38px;
+        padding: 8px 10px;
+      }
+
+      body.role-facilitador:not(.auth-mode) .plan-multigroup-student-summary {
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: 8px 9px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -6670,7 +6807,7 @@
     </div>
   </div>
 
-<script defer src="./libreaprendiz-app.js?v=20260512-fac-session-boundary-v2"></script>
+<script defer src="./libreaprendiz-app.js?v=20260512-fac-multigroup-consistency-v1"></script>
 </body>
 </html>
 
