@@ -3,7 +3,7 @@
       bootSnapshot: 'la_v8_boot_snapshot',
       planeacionOutbox: 'la_v8_planeacion_outbox'
     };
-    const APP_CLIENT_VERSION = '20260512-fac-mobile-flow-v4';
+    const APP_CLIENT_VERSION = '20260512-invalid-session-boundary-v5';
     const BOOT_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 60 * 12;
     const FACILITADOR_FEED_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 3;
     const OPEN_PLAN_DETAIL_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 8;
@@ -1373,6 +1373,21 @@
       renderAll();
     }
 
+    function assertInvalidSessionLoggedOut(message) {
+      window.setTimeout(() => {
+        const bannerText = String(($('statusBanner') && $('statusBanner').textContent) || '').trim();
+        if (!bannerText.includes('sesión expiró') && !bannerText.includes('sesion expiro')) return;
+        if (state.session && state.session.token) {
+          clearSessionScopedState();
+          setBanner(message, 'error');
+          return;
+        }
+        syncAuthMode();
+        renderSession();
+        syncRoleUi();
+      }, 80);
+    }
+
     function isInvalidSessionError(err) {
       return String(err && err.code || '').trim() === 'INVALID_SESSION';
     }
@@ -1381,8 +1396,10 @@
       const currentSessionToken = String((state.session && state.session.token) || '');
       const expected = String(expectedToken || '').trim();
       if (expected && currentSessionToken && currentSessionToken !== expected) return false;
+      const message = 'Tu sesión expiró o ya no es válida. Vuelve a iniciar sesión.';
       clearSessionScopedState();
-      setBanner('Tu sesión expiró o ya no es válida. Vuelve a iniciar sesión.', 'error');
+      setBanner(message, 'error');
+      assertInvalidSessionLoggedOut(message);
       return true;
     }
 
@@ -3004,6 +3021,12 @@
 
     async function refreshFacilitadorPlaneacionesFastBoot(options = {}) {
       ensureLoggedIn();
+      const bootSessionToken = String((state.session && state.session.token) || '');
+      const handleDeferredInvalidSession = (error) => {
+        if (!isInvalidSessionError(error)) return false;
+        handleInvalidSessionBoundary(error, bootSessionToken);
+        return true;
+      };
       // === Pre-cálculo de flags ===
       const surfaceCatalogBlocks = getPlaneacionesSurfaceCatalogBlocks();
       const missingSurfaceCatalogBlocks = getMissingCatalogBlocks(surfaceCatalogBlocks);
@@ -3096,7 +3119,9 @@
           try {
             await ensurePlaneacionesCatalogosAvailable({ render: false, scope: 'editor' });
             renderFacilitadorSuplenciasActivasHost();
-          } catch (_) {}
+          } catch (err) {
+            if (handleDeferredInvalidSession(err)) return;
+          }
         }
         renderBaseSelects({ planeaciones: true });
         renderPlanBuilderVisibility();
@@ -3106,7 +3131,9 @@
           try {
             await refreshAlertas();
             renderPlaneacionesSurface({ includeStats: false, includePlaneaciones: false, includeAlertas: true });
-          } catch (_) {}
+          } catch (err) {
+            if (handleDeferredInvalidSession(err)) return;
+          }
         }
 
         // 3. Notificaciones (silencioso)
@@ -3115,7 +3142,9 @@
             await refreshNotificaciones();
             persistCurrentBootSnapshot('notificaciones');
             renderInstitutionalNotices();
-          } catch (_) {}
+          } catch (err) {
+            if (handleDeferredInvalidSession(err)) return;
+          }
         }
 
         // 4. Si la lista vino del snapshot (no la pedimos al backend), refresh
@@ -3129,7 +3158,9 @@
               includePlaneaciones: true,
               includeAlertas: false
             });
-          } catch (_) {}
+          } catch (err) {
+            if (handleDeferredInvalidSession(err)) return;
+          }
         }
 
         // 5. Detalle del openPlan restaurado (si corresponde)
@@ -3150,9 +3181,14 @@
                     if (state.openPlanId !== requestedOpenPlanId) return;
                     renderPlaneacionesList();
                   })
-                  .catch(() => null);
+                  .catch((err) => {
+                    if (handleDeferredInvalidSession(err)) return null;
+                    return null;
+                  });
               }, 120);
-            } catch (_) {}
+            } catch (err) {
+              if (handleDeferredInvalidSession(err)) return;
+            }
           }, 120);
         }
 
