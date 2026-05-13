@@ -3,7 +3,7 @@
       bootSnapshot: 'la_v8_boot_snapshot',
       planeacionOutbox: 'la_v8_planeacion_outbox'
     };
-    const APP_CLIENT_VERSION = '20260512-invalid-session-boundary-v5';
+    const APP_CLIENT_VERSION = '20260512-fac-compact-editor-prod-v1';
     const BOOT_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 60 * 12;
     const FACILITADOR_FEED_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 3;
     const OPEN_PLAN_DETAIL_SNAPSHOT_MAX_AGE_MS = 1000 * 60 * 8;
@@ -12696,7 +12696,7 @@
       const host = $('planAlumnosChecklist');
       const catalogsLoading = !!(state.ui && state.ui.planeacionesCatalogosLoading) && currentViewNeedsCatalogos();
       if (host) {
-        host.classList.remove('is-multigroup-alumnos', 'is-taller-alumnos-list');
+        host.classList.remove('is-multigroup-alumnos', 'is-taller-alumnos-list', 'is-single-group-alumnos');
       }
       if (catalogsLoading) {
         host.innerHTML = '<div class="empty">Cargando grupos y alumnos...</div>';
@@ -12725,11 +12725,11 @@
           });
         });
         const selectedCount = alumnos.filter((alumno) => selected.has(String(alumno.alumno_id || '').trim())).length;
-        host.innerHTML = '<div class="group-block is-taller-alumnos">' +
+        host.innerHTML = '<div class="group-block is-taller-alumnos plan-editor-student-panel">' +
           '<div class="group-block-head">' +
             '<div><strong>Alumnos del taller</strong><span class="mini">' + escapeHtml(String(selectedCount)) + ' de ' + escapeHtml(String(alumnos.length)) + ' seleccionado(s)</span></div>' +
           '</div>' +
-          '<div class="checklist plan-alumnos-flat">' +
+          '<div class="checklist plan-alumnos-flat plan-editor-students-list">' +
             (alumnos.length ? alumnos.map((alumno) => {
               const alumnoId = String(alumno.alumno_id || '').trim();
               const label = getAlumnoNameLabel(alumno);
@@ -12760,11 +12760,11 @@
           });
         });
         const selectedCount = alumnos.filter((alumno) => selected.has(String(alumno.alumno_id || '').trim())).length;
-        host.innerHTML = '<div class="group-block is-multigroup-alumnos-flat">' +
+        host.innerHTML = '<div class="group-block is-multigroup-alumnos-flat plan-editor-student-panel">' +
           '<div class="group-block-head">' +
             '<div><strong>Alumnos</strong> <span class="mini">' + escapeHtml(String(selectedCount)) + ' de ' + escapeHtml(String(alumnos.length)) + ' seleccionado(s)</span></div>' +
           '</div>' +
-          '<div class="checklist plan-alumnos-flat">' +
+          '<div class="checklist plan-alumnos-flat plan-editor-students-list">' +
             (alumnos.length ? alumnos.map((alumno) => {
               const alumnoId = String(alumno.alumno_id || '').trim();
               const label = getAlumnoNameLabel(alumno);
@@ -12783,16 +12783,17 @@
         '</div>';
         return;
       }
+      host.classList.add('is-single-group-alumnos');
       host.innerHTML = groupIds.map((groupId) => {
         const group = getCatalogIndex().gruposById.get(String(groupId || '').trim());
         const alumnos = getPlanEditorAlumnosByGroupId(groupId);
         const selectedCount = alumnos.filter((alumno) => selected.has(String(alumno.alumno_id || '').trim())).length;
         return (
-            '<div class="group-block">' +
+            '<div class="group-block plan-editor-student-panel">' +
               '<div class="group-block-head">' +
                 '<div><strong>' + escapeHtml(group ? getGrupoDisplayName(group) : groupId) + '</strong><span class="mini">' + escapeHtml(String(selectedCount)) + ' de ' + escapeHtml(String(alumnos.length)) + ' seleccionado(s)</span></div>' +
               '</div>' +
-            '<div class="checklist">' +
+            '<div class="checklist plan-editor-students-list">' +
               (alumnos.length ? alumnos.map((alumno) => {
                 const label = getAlumnoNameLabel(alumno);
                 const alumnoId = String(alumno.alumno_id || '').trim();
@@ -13382,7 +13383,7 @@
                     '</div>'
                   : '') +
               '</div>' +
-              '<div class="group-block plan-open-students">' +
+              '<div class="plan-open-students plan-open-students-flat">' +
                 (alumnosGrupo.map((alumno) => (
                   '<label class="check-item">' +
                     '<input type="checkbox" value="' + escapeHtml(alumno.alumno_id) + '"' + (selectedIds.has(alumno.alumno_id) ? ' checked' : '') + (isActiveGroup ? '' : ' disabled') + ' onchange="toggleOpenPlanDraftAlumno(\'' + escapeJsAttrValue(alumno.alumno_id) + '\', this.checked)">' +
@@ -13611,7 +13612,7 @@
                 '<button class="btn-ghost" type="button" onclick="toggleAllOpenPlanDraftAlumnos(false)">Limpiar</button>' +
               '</div>' +
             '</div>' +
-            '<div id="' + escapeHtml(openFieldIds.alumnos) + '" class="group-block plan-open-students">' +
+            '<div id="' + escapeHtml(openFieldIds.alumnos) + '" class="plan-open-students plan-open-students-flat plan-open-students-panel">' +
               (alumnosGrupo.map((alumno) => (
                 '<label class="check-item">' +
                   '<input type="checkbox" value="' + escapeHtml(alumno.alumno_id) + '"' + (selected.has(alumno.alumno_id) ? ' checked' : '') + ' onchange="toggleOpenPlanDraftAlumno(\'' + escapeJsAttrValue(alumno.alumno_id) + '\', this.checked)">' +

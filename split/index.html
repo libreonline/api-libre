@@ -4326,6 +4326,87 @@
       min-height: 74px;
     }
 
+    .plan-builder-shell .group-block,
+    .plan-card .group-block {
+      border-color: rgba(255, 255, 255, 0.09);
+      background: rgba(255, 255, 255, 0.035);
+      box-shadow: none;
+    }
+
+    .plan-builder-shell .plan-editor-student-panel,
+    .plan-card .plan-open-student-panel {
+      padding: 10px 0 0;
+      border: 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .plan-builder-shell .plan-editor-student-panel:first-child,
+    .plan-card .plan-open-student-panel:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .plan-editor-students-list,
+    .plan-open-students-flat {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+      max-height: min(42vh, 320px);
+      overflow: auto;
+      padding: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      background: rgba(10, 12, 14, 0.16);
+    }
+
+    .plan-open-students-flat.plan-open-students-panel {
+      max-height: min(44vh, 340px);
+    }
+
+    .plan-editor-students-list .check-item,
+    .plan-open-students-flat .check-item {
+      min-height: 42px;
+      align-items: center;
+      padding: 8px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    .plan-editor-students-list .check-item input[type="checkbox"],
+    .plan-open-students-flat .check-item input[type="checkbox"] {
+      margin-top: 0;
+      flex: 0 0 auto;
+    }
+
+    .plan-editor-students-list .check-item strong,
+    .plan-open-students-flat .check-item strong {
+      font-size: 0.94rem;
+      line-height: 1.2;
+    }
+
+    .plan-builder-shell #planAlumnosChecklist.is-single-group-alumnos,
+    .plan-builder-shell #planAlumnosChecklist.is-multigroup-alumnos,
+    .plan-builder-shell #planAlumnosChecklist.is-taller-alumnos-list {
+      max-height: none !important;
+      overflow: visible !important;
+      padding: 0 !important;
+      border: 0 !important;
+      background: transparent !important;
+    }
+
+    .plan-builder-shell #planAlumnosChecklist.is-single-group-alumnos .plan-editor-students-list,
+    .plan-builder-shell #planAlumnosChecklist.is-multigroup-alumnos .plan-editor-students-list,
+    .plan-builder-shell #planAlumnosChecklist.is-taller-alumnos-list .plan-editor-students-list {
+      max-height: min(42vh, 320px) !important;
+      overflow: auto !important;
+      padding: 8px !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      background: rgba(10, 12, 14, 0.16) !important;
+    }
+
     .plan-date-detected-field {
       display: grid;
       gap: 6px;
@@ -4457,6 +4538,13 @@
     .plan-builder-shell .checklist {
       max-height: 184px;
       padding: 10px;
+      gap: 8px;
+    }
+
+    .plan-builder-shell .plan-editor-students-list,
+    .plan-card .plan-open-students-flat {
+      max-height: min(42vh, 320px);
+      padding: 8px;
       gap: 8px;
     }
 
@@ -6582,7 +6670,7 @@
     </div>
   </div>
 
-<script defer src="./libreaprendiz-app.js?v=20260512-invalid-session-boundary-v5"></script>
+<script defer src="./libreaprendiz-app.js?v=20260512-fac-compact-editor-prod-v1"></script>
 </body>
 </html>
 
