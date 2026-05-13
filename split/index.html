@@ -5912,9 +5912,9 @@
 
     body.role-facilitador:not(.auth-mode) .plan-card .plan-open-students-flat,
     body.role-facilitador:not(.auth-mode) .plan-builder-shell .plan-editor-students-list {
-      max-height: none !important;
-      overflow: visible !important;
-      padding: 0 !important;
+      max-height: min(44vh, 360px) !important;
+      overflow: auto !important;
+      padding: 2px !important;
       border: 0 !important;
       border-radius: 0 !important;
       background: transparent !important;
@@ -5966,6 +5966,10 @@
         grid-template-columns: 1fr 1fr;
         gap: 8px;
         width: 100%;
+      }
+
+      body.role-facilitador:not(.auth-mode) .plan-open-editor-group.is-multigroup-compact .group-block-head .actions.compact {
+        display: none !important;
       }
 
       body.role-facilitador:not(.auth-mode) .plan-card .group-block-head .actions.compact > .btn-ghost,

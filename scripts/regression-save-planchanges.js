@@ -1,55 +1,186 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('playwright');
+let chromium;
 
 const repoRoot = path.resolve(__dirname, '..');
 const defaultBaseUrl = 'http://127.0.0.1:8765/split/';
 const backendUrl = 'https://script.google.com/macros/s/AKfycbw_uv4htKdG-Qur5DZysZgdbOdQ8kCeGJiIkErJut3-U7QQqGq8TV3HwggGaJfGIqgqyw/exec';
+const productionBackendUrl = 'https://script.google.com/macros/s/AKfycbwoUFz4MwbWimGIHgQZtykkdHOSRA694gA8QDGzEkqIX4dX93H8Mvst8LuaVOnaznNj/exec';
+const stagingPublicBaseUrl = 'https://cdkeyhouse.github.io/libretest/split/';
+const productionPublicBaseUrl = 'https://libreonline.github.io/api-libre/split/';
 const baseUrl = process.env.BASE_URL || defaultBaseUrl;
 const facId = process.env.FAC_ID || 'FAC-001';
 const facPin = process.env.FAC_PIN || '4101';
 const headless = process.env.HEADFUL !== '1';
 const strictNewSessionUi = process.env.STRICT_NEW_SESSION_UI === '1';
 const scenarioFilter = String(process.env.SCENARIO_FILTER || '').trim().toLowerCase();
+const cliArgs = new Set(process.argv.slice(2));
+const dryRun = process.env.DRY_RUN === '1' || cliArgs.has('--dry-run');
+const requireScenarioFilter = process.env.REQUIRE_SCENARIO_FILTER === '1' || cliArgs.has('--require-scenario-filter');
+const exactScenarioFilter = process.env.EXACT_SCENARIO_FILTER === '1' || cliArgs.has('--exact-scenario-filter');
+const artifactDir = path.resolve(process.env.ARTIFACT_DIR || path.join(repoRoot, 'artifacts', 'bartolo'));
+const writeRecords = [];
+let selectedScenarioNames = [];
+let latestResults = [];
 
 const scenarios = [
   {
     name: 'taller multigrupo observacion general',
-    pattern: /Taller/i,
+    pattern: /\bTaller\b/i,
     exclude: null,
     kind: 'general',
     maxVisibleMs: 800
   },
   {
     name: 'multigrupo normal observacion general',
-    pattern: /Razonamiento Matem.tico.*3 grupos|3 grupos.*Razonamiento Matem.tico/i,
-    exclude: null,
+    pattern: /\b\d+\s+grupos\b/i,
+    exclude: /\bTaller\b/i,
     kind: 'general',
     maxVisibleMs: 800
   },
   {
     name: 'grupo normal observacion general',
-    pattern: /5 alumno\(s\).*Razonamiento Matem.tico|TAU\s+Razonamiento Matem.tico/i,
-    exclude: /grupos/i,
+    pattern: /\b\d+\s+alumno\(s\)\b/i,
+    exclude: /\b\d+\s+grupos\b|\bTaller\b/i,
     kind: 'general',
     maxVisibleMs: 800
   },
   {
     name: 'taller multigrupo observacion final',
-    pattern: /Taller/i,
+    pattern: /\bTaller\b/i,
     exclude: null,
     kind: 'final',
     maxVisibleMs: 800
   },
   {
     name: 'multigrupo normal observacion final',
-    pattern: /Razonamiento Matem.tico.*3 grupos|3 grupos.*Razonamiento Matem.tico/i,
-    exclude: null,
+    pattern: /\b\d+\s+grupos\b/i,
+    exclude: /\bTaller\b/i,
     kind: 'final',
     maxVisibleMs: 800
   }
 ];
+
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+function makeRunId() {
+  const explicit = String(process.env.BARTOLO_RUN_ID || '').trim();
+  if (explicit) return explicit.replace(/[^A-Za-z0-9_-]/g, '-');
+  const now = new Date();
+  const stamp = [
+    now.getFullYear(),
+    pad2(now.getMonth() + 1),
+    pad2(now.getDate()),
+    '-',
+    pad2(now.getHours()),
+    pad2(now.getMinutes()),
+    pad2(now.getSeconds())
+  ].join('');
+  return 'BARTOLO-' + stamp + '-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+const runId = makeRunId();
+const artifactPath = path.join(artifactDir, runId + '.json');
+
+function normalizeComparableUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '').toLowerCase();
+}
+
+function parseUrl(value) {
+  try {
+    return new URL(value);
+  } catch (_) {
+    return null;
+  }
+}
+
+function isLocalRunnerUrl(value) {
+  const parsed = parseUrl(value);
+  if (!parsed) return false;
+  const host = String(parsed.hostname || '').toLowerCase();
+  return host === '127.0.0.1' || host === 'localhost';
+}
+
+function isStagingRunnerUrl(value) {
+  return normalizeComparableUrl(value).startsWith(normalizeComparableUrl(stagingPublicBaseUrl));
+}
+
+function isProductionRunnerUrl(value) {
+  const parsed = parseUrl(value);
+  if (!parsed) return false;
+  const host = String(parsed.hostname || '').toLowerCase();
+  const pathName = String(parsed.pathname || '').toLowerCase();
+  return host === 'libreonline.github.io' && pathName.startsWith('/api-libre/');
+}
+
+function assertBartoloSafeEnvironment() {
+  if (normalizeComparableUrl(backendUrl) === normalizeComparableUrl(productionBackendUrl)) {
+    throw new Error('Bartolo bloqueado: backendUrl apunta a produccion.');
+  }
+  if (isProductionRunnerUrl(baseUrl) || normalizeComparableUrl(baseUrl).startsWith(normalizeComparableUrl(productionPublicBaseUrl))) {
+    throw new Error('Bartolo bloqueado: BASE_URL apunta a produccion. Usa staging o localhost.');
+  }
+  if (!isLocalRunnerUrl(baseUrl) && !isStagingRunnerUrl(baseUrl)) {
+    throw new Error('Bartolo bloqueado: BASE_URL debe ser staging o localhost. Valor actual: ' + baseUrl);
+  }
+  if (requireScenarioFilter && !scenarioFilter) {
+    throw new Error('Bartolo bloqueado: REQUIRE_SCENARIO_FILTER activo pero SCENARIO_FILTER esta vacio.');
+  }
+}
+
+function getSelectedScenarios() {
+  const selected = scenarioFilter
+    ? scenarios.filter((scenario) => {
+        const name = scenario.name.toLowerCase();
+        return exactScenarioFilter ? name === scenarioFilter : name.includes(scenarioFilter);
+      })
+    : scenarios;
+  if (!selected.length) {
+    throw new Error('SCENARIO_FILTER no coincide con ningun escenario: ' + scenarioFilter);
+  }
+  return selected;
+}
+
+function recordWrite(record) {
+  const next = Object.assign({
+    runId,
+    status: 'prepared',
+    createdAt: new Date().toISOString()
+  }, record || {});
+  writeRecords.push(next);
+  return next;
+}
+
+function updateWriteRecord(record, patch) {
+  if (!record) return null;
+  Object.assign(record, patch || {}, {
+    updatedAt: new Date().toISOString()
+  });
+  return record;
+}
+
+function writeArtifact(payload) {
+  const body = Object.assign({
+    runner: 'Bartolo',
+    runId,
+    artifactPath,
+    baseUrl,
+    backendUrl,
+    facId,
+    scenarioFilter: scenarioFilter || 'todos',
+    exactScenarioFilter,
+    strictNewSessionUi,
+    dryRun,
+    selectedScenarios: selectedScenarioNames,
+    writes: writeRecords
+  }, payload || {});
+  fs.mkdirSync(artifactDir, { recursive: true });
+  fs.writeFileSync(artifactPath, JSON.stringify(body, null, 2));
+  return body;
+}
 
 function contentType(filePath) {
   if (filePath.endsWith('.html')) return 'text/html; charset=utf-8';
@@ -116,8 +247,26 @@ async function login(page) {
   await page.fill('#pinInput', facPin);
   await page.click('#loginBtn');
   await page.waitForFunction(() => {
-    return Array.from(document.querySelectorAll('button')).some((button) => /Abrir/i.test(button.textContent || ''));
+    const hasOpenPlanButton = Array.from(document.querySelectorAll('button')).some((button) => /Abrir/i.test(button.textContent || ''));
+    const text = document.body && document.body.innerText || '';
+    return hasOpenPlanButton ||
+      /Todav[ií]a no hay planeaciones/i.test(text) ||
+      /Demasiadas solicitudes/i.test(text);
   }, null, { timeout: 90000 });
+  const state = await page.evaluate(() => {
+    const text = document.body && document.body.innerText || '';
+    return {
+      openButtons: Array.from(document.querySelectorAll('button')).filter((button) => /Abrir/i.test(button.textContent || '')).length,
+      empty: /Todav[ií]a no hay planeaciones/i.test(text),
+      rateLimit: /Demasiadas solicitudes/i.test(text)
+    };
+  });
+  if (state.rateLimit) {
+    throw new Error('Bartolo bloqueado por RATE_LIMIT durante login. Espera y vuelve a correr.');
+  }
+  if (!state.openButtons) {
+    throw new Error('Bartolo no puede correr: staging no tiene planeaciones abiertas para el facilitador ' + facId + '. Ejecuta primero un seed controlado o crea una planeacion QA.');
+  }
 }
 
 async function clickOpenButton(page, cardId) {
@@ -140,7 +289,14 @@ async function openScenario(page, scenario) {
   });
   const target = cards.find((card) => scenario.pattern.test(card.text) && !(scenario.exclude && scenario.exclude.test(card.text)));
   if (!target) {
-    throw new Error(`No encontre tarjeta para escenario "${scenario.name}". Tarjetas: ${JSON.stringify(cards, null, 2)}`);
+    const summaries = cards.map((card) => ({
+      id: card.id,
+      hasOpenButton: /Abrir/i.test(card.text),
+      hasTaller: /\bTaller\b/i.test(card.text),
+      hasMultiGroup: /\b\d+\s+grupos\b/i.test(card.text),
+      hasStudentCount: /\b\d+\s+alumno\(s\)\b/i.test(card.text)
+    }));
+    throw new Error(`No encontre tarjeta para escenario "${scenario.name}". Resumen de tarjetas: ${JSON.stringify(summaries, null, 2)}`);
   }
   await clickOpenButton(page, target.id);
   await page.waitForSelector('textarea[id^="obs-general-"]', { timeout: 90000 });
@@ -164,7 +320,15 @@ async function saveObservation(page, scenario) {
   await login(page);
   const { target, inputId, planId } = await openScenario(page, scenario);
   console.log(`[regression] objetivo: ${scenario.name} -> ${planId}`);
-  const note = `QA ${scenario.name} ${Date.now()}`;
+  const note = `QA ${runId} ${scenario.name} ${Date.now()}`;
+  const writeRecord = recordWrite({
+    scenario: scenario.name,
+    kind: scenario.kind,
+    planId,
+    targetPlanId: planId,
+    alumnoId: '',
+    note
+  });
   let finalTarget = null;
   if (scenario.kind === 'final') {
     const preferredPrefix = 'obs-final-' + planId + '-';
@@ -188,11 +352,16 @@ async function saveObservation(page, scenario) {
       planId: targetPlanId,
       alumnoId
     };
+    updateWriteRecord(writeRecord, {
+      targetPlanId,
+      alumnoId
+    });
     console.log(`[regression] final target: ${JSON.stringify(finalTarget)}`);
     await page.fill('#' + finalInputId, note);
   } else {
     await page.fill('#' + inputId, note);
   }
+  updateWriteRecord(writeRecord, { status: 'submitted' });
   const countBefore = await page.locator('[id^="plan-card-"]').count();
   const startMs = Date.now();
   await page.evaluate((id) => {
@@ -305,6 +474,7 @@ async function saveObservation(page, scenario) {
       const finalObs = json && json.data && Array.isArray(json.data.obs_alumno_final) ? json.data.obs_alumno_final : [];
       return {
         ok: !!(json && json.ok),
+        code: json && (json.code || (json.error && json.error.code)) || '',
         count: obs.length,
         finalCount: finalObs.length,
         containsNote: kind === 'final'
@@ -320,6 +490,10 @@ async function saveObservation(page, scenario) {
         error: json && (json.error || json.message || json.code) || ''
       };
     }, { url: backendUrl, id: planId, value: note, kind: scenario.kind, finalTarget });
+    if (persisted && /RATE_LIMIT|Demasiadas solicitudes/i.test(String(persisted.code || persisted.error || ''))) {
+      updateWriteRecord(writeRecord, { status: 'rate_limited', persisted });
+      throw new Error(`${scenario.name}: RATE_LIMIT durante verificacion de persistencia. Espera y vuelve a correr.`);
+    }
     if (persisted && persisted.ok && persisted.containsNote) break;
     await page.waitForTimeout(3000);
   }
@@ -342,8 +516,10 @@ async function saveObservation(page, scenario) {
   }
 
   if (!persisted.ok || !persisted.containsNote) {
+    updateWriteRecord(writeRecord, { status: 'not_confirmed', persisted });
     throw new Error(`${scenario.name}: backend no devolvio la observacion persistida. ${JSON.stringify({ persisted, traceSummary }, null, 2)}`);
   }
+  updateWriteRecord(writeRecord, { status: 'persisted', persisted });
   if (scenario.kind === 'general' && String(persistedInputValue || '').trim()) {
     throw new Error(`${scenario.name}: sesion nueva reinyecto texto en textarea.`);
   }
@@ -352,24 +528,50 @@ async function saveObservation(page, scenario) {
     scenario: scenario.name,
     planId,
     visibleMs,
-    target: target.text.slice(0, 160),
+    target: {
+      id: target.id,
+      hasTaller: /\bTaller\b/i.test(target.text),
+      hasMultiGroup: /\b\d+\s+grupos\b/i.test(target.text),
+      hasStudentCount: /\b\d+\s+alumno\(s\)\b/i.test(target.text)
+    },
     outboxRetryCount: retrySummary.count,
     outboxRetryReasons: retrySummary.reasons,
+    write: writeRecord,
     traces: traceSummary
   };
 }
 
 (async () => {
+  assertBartoloSafeEnvironment();
+  const selectedScenarios = getSelectedScenarios();
+  selectedScenarioNames = selectedScenarios.map((scenario) => scenario.name);
+  console.log(JSON.stringify({
+    runner: 'Bartolo',
+    runId,
+    mode: 'staging-qa',
+    dryRun,
+    baseUrl,
+    backendUrl,
+    facId,
+    scenarioFilter: scenarioFilter || 'todos',
+    exactScenarioFilter,
+    strictNewSessionUi,
+    artifactPath,
+    selectedScenarios: selectedScenarioNames
+  }, null, 2));
+  if (dryRun) {
+    const payload = writeArtifact({
+      ok: true,
+      message: 'Dry-run: no se abrio navegador y no se escribieron datos.'
+    });
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+  ({ chromium } = require('playwright'));
   const server = await startStaticServerIfNeeded();
   const browser = await chromium.launch({ headless });
   const results = [];
   try {
-    const selectedScenarios = scenarioFilter
-      ? scenarios.filter((scenario) => scenario.name.toLowerCase().includes(scenarioFilter))
-      : scenarios;
-    if (!selectedScenarios.length) {
-      throw new Error('SCENARIO_FILTER no coincide con ningun escenario: ' + scenarioFilter);
-    }
     for (const scenario of selectedScenarios) {
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       const page = await context.newPage();
@@ -379,12 +581,26 @@ async function saveObservation(page, scenario) {
         await context.close();
       }
     }
-    console.log(JSON.stringify({ ok: true, results }, null, 2));
+    latestResults = results;
+    const payload = writeArtifact({ ok: true, results });
+    console.log(JSON.stringify(payload, null, 2));
   } finally {
     await browser.close();
     if (server) server.close();
   }
 })().catch((err) => {
+  try {
+    writeArtifact({
+      ok: false,
+      error: err && err.message ? err.message : String(err),
+      stack: err && err.stack ? err.stack : '',
+      results: latestResults,
+      pendingWrites: writeRecords.filter((record) => record.status !== 'persisted')
+    });
+    console.error('[Bartolo] artifact: ' + artifactPath);
+  } catch (artifactError) {
+    console.error('[Bartolo] no se pudo escribir artifact: ' + (artifactError && artifactError.message || artifactError));
+  }
   console.error(err);
   process.exit(1);
 });
