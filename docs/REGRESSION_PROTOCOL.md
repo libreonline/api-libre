@@ -114,7 +114,7 @@ Este gate:
 
 - bloquea backend/frontend de produccion;
 - corre `test:facilitador:session-boundary`;
-- corre `test:facilitador`;
+- limpia datos QA de staging con `reset:testdata` antes de las pruebas que escriben;
 - corre `qa:planeaciones:staging-serial` en serie.
 
 Opcional cuando el parche toca `savePlanChanges`, outbox, observaciones, multigrupo o taller:
